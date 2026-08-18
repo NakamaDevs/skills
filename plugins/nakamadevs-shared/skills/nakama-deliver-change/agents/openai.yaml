@@ -1,0 +1,6 @@
+interface:
+  display_name: "Nakama Deliver Change"
+  short_description: "Run the Nakama delivery workflow"
+  default_prompt: "Use $nakama-deliver-change to deliver this repository change from Linear issue through validated PR."
+policy:
+  allow_implicit_invocation: false

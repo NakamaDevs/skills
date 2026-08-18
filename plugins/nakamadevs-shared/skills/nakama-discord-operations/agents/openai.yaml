@@ -1,0 +1,6 @@
+interface:
+  display_name: "Nakama Discord Operations"
+  short_description: "Use Nakama Discord operations safely"
+  default_prompt: "Use $nakama-discord-operations to work with nakamadevs-feed or the approved slash commands."
+policy:
+  allow_implicit_invocation: false

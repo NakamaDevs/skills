@@ -1,0 +1,28 @@
+schema_version = 1
+repository = "NakamaDevs/codex-skills"
+kind = "single"
+governance_version = "1.7.0"
+
+[skills]
+bundle = "nakamadevs-shared"
+version = "0.1.0"
+source = "https://github.com/NakamaDevs/codex-skills.git"
+revision = "self"
+
+[linear]
+team = "NAK"
+project = "Codex Skills"
+
+[quality]
+quick = "mise run verify:quick"
+full = "mise run verify"
+hooks_install = "mise run hooks:install"
+
+[review]
+router = "nakama-review-change"
+
+[discord]
+guild_id = "875555017451507722"
+project_thread_id = "0"
+operations_channel_id = "1533964854078214175"
+operator_role_id = "1320910752466468874"

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Emerging Technology Research"
+  short_description: "Build deep, traceable research programs"
+  default_prompt: "Use $track-emerging-technology to design investigation tracks, map evidence to claims, and publish lineage-traced research."
+policy:
+  allow_implicit_invocation: false

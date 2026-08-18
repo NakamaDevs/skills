@@ -1,0 +1,4 @@
+interface:
+  display_name: "Nakama Review Change"
+  short_description: "Review with Nakama engineering gates"
+  default_prompt: "Use $nakama-review-change to review this diff against repository and organization gates."

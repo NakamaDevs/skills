@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Amanuensis changes"
+  short_description: "Review Flutter, macOS, and Windows code"
+  default_prompt: "Use $review-amanuensis-change to review this Amanuensis change with the relevant platform checklist."

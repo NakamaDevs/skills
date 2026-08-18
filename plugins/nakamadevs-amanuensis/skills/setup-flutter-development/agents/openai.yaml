@@ -1,0 +1,6 @@
+interface:
+  display_name: "Set up Flutter development"
+  short_description: "Provision a cross-platform Flutter workstation"
+  default_prompt: "Use $setup-flutter-development to prepare this host for the Flutter targets I need."
+policy:
+  allow_implicit_invocation: false

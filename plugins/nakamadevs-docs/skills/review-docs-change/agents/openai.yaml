@@ -1,0 +1,4 @@
+interface:
+  display_name: "review docs change"
+  short_description: "Use the review docs change workflow with Codex"
+  default_prompt: "Use $review-docs-change to complete this task safely."

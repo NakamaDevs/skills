@@ -1,0 +1,6 @@
+interface:
+  display_name: "Set up prek Git hooks"
+  short_description: "Install and verify portable prek Git hooks"
+  default_prompt: "Use $setup-prek-git-hooks to install and verify this repository’s Git hooks."
+policy:
+  allow_implicit_invocation: false

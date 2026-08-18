@@ -1,0 +1,29 @@
+schema_version = 1
+repository = "NakamaDevs/example"
+kind = "single"
+governance_version = "1.7.0"
+
+[skills]
+bundle = "nakamadevs-shared"
+version = "0.1.0"
+source = "https://github.com/NakamaDevs/codex-skills.git"
+revision = "REPLACE_WITH_EXACT_CODEX_SKILLS_COMMIT_SHA"
+
+[linear]
+team = "NAK"
+project = "Example"
+
+[quality]
+quick = "mise run verify:quick"
+full = "mise run verify"
+hooks_install = "mise run git-hooks:install"
+
+[review]
+router = "review-example-change"
+additional = []
+
+[discord]
+guild_id = "875555017451507722"
+project_thread_id = "REPLACE_WITH_THREAD_ID"
+operations_channel_id = "1533964854078214175"
+operator_role_id = "1320910752466468874"

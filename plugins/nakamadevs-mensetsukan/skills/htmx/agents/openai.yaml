@@ -1,0 +1,4 @@
+interface:
+  display_name: "htmx"
+  short_description: "Use the htmx workflow with Codex"
+  default_prompt: "Use $htmx to complete this task safely."

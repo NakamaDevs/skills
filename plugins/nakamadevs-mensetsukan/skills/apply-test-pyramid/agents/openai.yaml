@@ -1,0 +1,4 @@
+interface:
+  display_name: "Apply the Test Pyramid"
+  short_description: "Choose economical test layers by risk"
+  default_prompt: "Use $apply-test-pyramid to design a risk-based unit, integration, and end-to-end test strategy."

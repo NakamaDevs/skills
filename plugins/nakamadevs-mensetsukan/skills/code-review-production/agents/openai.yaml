@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Production Readiness"
+  short_description: "Check operability, resilience, and release risk"
+  default_prompt: "Use $code-review-production to inspect this change for runtime and release-readiness risks."

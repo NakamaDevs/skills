@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plan Interface Design"
+  short_description: "Define interface behavior before implementation"
+  default_prompt: "Use $plan-interface-design to define the interface flow, states, and OpenPencil artifact before implementation planning."

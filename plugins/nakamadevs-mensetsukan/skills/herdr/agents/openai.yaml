@@ -1,0 +1,4 @@
+interface:
+  display_name: "Herdr"
+  short_description: "Control and troubleshoot Herdr workspaces"
+  default_prompt: "Use $herdr to inspect and coordinate my Herdr workspace safely."

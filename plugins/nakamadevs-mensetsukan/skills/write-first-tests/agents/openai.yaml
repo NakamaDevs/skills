@@ -1,0 +1,4 @@
+interface:
+  display_name: "Write FIRST Tests"
+  short_description: "Keep automated tests fast and trustworthy"
+  default_prompt: "Use $write-first-tests to review and improve these tests against the FIRST principles."

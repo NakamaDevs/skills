@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Kantoku Windows"
+  short_description: "Review Windows tray and runner changes"
+  default_prompt: "Use $review-kantoku-windows to review this Kantoku Windows tray or runner change."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Documentation"
+  short_description: "Detect documentation and contract drift"
+  default_prompt: "Use $code-review-documentation to verify that relevant docs and examples remain accurate."

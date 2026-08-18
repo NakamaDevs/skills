@@ -1,0 +1,4 @@
+interface:
+  display_name: "Build Playwright Go E2E"
+  short_description: "Build durable Go browser acceptance tests"
+  default_prompt: "Use $build-playwright-go-e2e to add a small, reliable Playwright Go end-to-end workflow."

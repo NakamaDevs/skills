@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Runner Fleet changes"
+  short_description: "Review runner infrastructure changes"
+  default_prompt: "Use $review-runner-fleet-change to review this Runner Fleet change across affected host platforms."

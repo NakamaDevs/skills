@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Amanuensis macOS"
+  short_description: "Review Swift and native macOS changes"
+  default_prompt: "Use $review-amanuensis-macos to review the Amanuensis macOS and Swift changes."

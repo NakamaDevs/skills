@@ -1,0 +1,6 @@
+interface:
+  display_name: "Install official Flutter skills"
+  short_description: "Install official Flutter skills globally"
+  default_prompt: "Use $install-official-flutter-skills to install the official Flutter skills bundle for my coding agents."
+policy:
+  allow_implicit_invocation: false

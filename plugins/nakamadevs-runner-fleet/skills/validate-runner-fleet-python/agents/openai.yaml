@@ -1,0 +1,4 @@
+interface:
+  display_name: "Validate Runner Fleet Python"
+  short_description: "Run Python formatting, lint, and tests"
+  default_prompt: "Use $validate-runner-fleet-python to run and explain the Runner Fleet Python quality gates."

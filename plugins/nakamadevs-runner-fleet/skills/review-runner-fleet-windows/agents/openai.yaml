@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Runner Fleet Windows"
+  short_description: "Review Windows and PowerShell automation"
+  default_prompt: "Use $review-runner-fleet-windows to review Windows and PowerShell runner changes."

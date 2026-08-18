@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Amanuensis Flutter"
+  short_description: "Review shared Flutter and Dart changes"
+  default_prompt: "Use $review-amanuensis-flutter to review the shared Flutter and Dart changes."
