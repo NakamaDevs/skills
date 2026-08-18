@@ -1,6 +1,6 @@
 # Codex skills repository guide
 
-This repository contains public Codex skills and plugin metadata.
+This repository contains private Codex skills and plugin metadata.
 Kaicho contains organization policy.
 Do not copy policy into this repository.
 

@@ -1,6 +1,6 @@
 # NakamaDevs Codex skills
 
-This repository is the public Codex skill catalog for NakamaDevs.
+This repository is the private Codex skill catalog for NakamaDevs.
 Kaicho remains the source for organization policy.
 This repository contains reusable Codex workflows only.
 
