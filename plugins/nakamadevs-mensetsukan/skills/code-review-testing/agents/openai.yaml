@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Tests"
+  short_description: "Check behavior coverage and test validity"
+  default_prompt: "Use $code-review-testing to verify that the changed behavior has useful regression tests."

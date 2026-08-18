@@ -1,0 +1,4 @@
+interface:
+  display_name: "Summarize Amanuensis roadmap"
+  short_description: "Build a visual HTML roadmap primer"
+  default_prompt: "Use $summarize-amanuensis-roadmap to generate a visual HTML primer of the Amanuensis roadmap."

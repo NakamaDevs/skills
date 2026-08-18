@@ -1,0 +1,4 @@
+interface:
+  display_name: "general video"
+  short_description: "Use the general video workflow with Codex"
+  default_prompt: "Use $general-video to complete this task safely."

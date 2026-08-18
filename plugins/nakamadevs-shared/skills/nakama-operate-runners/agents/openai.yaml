@@ -1,0 +1,6 @@
+interface:
+  display_name: "Nakama Operate Runners"
+  short_description: "Operate Nakama self-hosted runners"
+  default_prompt: "Use $nakama-operate-runners to inspect or safely recover the Nakama runner fleet."
+policy:
+  allow_implicit_invocation: false

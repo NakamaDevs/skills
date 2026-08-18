@@ -1,0 +1,6 @@
+interface:
+  display_name: "Set up a self-hosted CI runner"
+  short_description: "Provision a lean self-hosted CI runner"
+  default_prompt: "Use $setup-self-hosted-ci-runner to provision and verify this host as a lean self-hosted CI runner."
+policy:
+  allow_implicit_invocation: false

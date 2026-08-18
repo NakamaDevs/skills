@@ -1,0 +1,6 @@
+interface:
+  display_name: "Roll out Runner Fleet"
+  short_description: "Repair and update runner hosts safely"
+  default_prompt: "Use $rollout-runner-fleet to plan, canary, and verify a staged runner fleet rollout."
+policy:
+  allow_implicit_invocation: false

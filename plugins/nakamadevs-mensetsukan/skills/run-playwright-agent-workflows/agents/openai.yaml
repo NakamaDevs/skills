@@ -1,0 +1,6 @@
+interface:
+  display_name: "Run Playwright Agent Workflows"
+  short_description: "Use Playwright CLI and MCP with agents"
+  default_prompt: "Use $run-playwright-agent-workflows to explore, generate, and harden a browser workflow with Playwright CLI or MCP."
+policy:
+  allow_implicit_invocation: false

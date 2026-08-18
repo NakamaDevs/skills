@@ -1,0 +1,4 @@
+interface:
+  display_name: "nakama write plain language"
+  short_description: "Use the nakama write plain language workflow with Codex"
+  default_prompt: "Use $nakama-write-plain-language to complete this task safely."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Amanuensis release"
+  short_description: "Review CI, packaging, versions, and releases"
+  default_prompt: "Use $review-amanuensis-release to review the Amanuensis CI or release changes."

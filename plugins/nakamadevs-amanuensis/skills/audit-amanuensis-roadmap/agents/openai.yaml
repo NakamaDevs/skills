@@ -1,0 +1,4 @@
+interface:
+  display_name: "Audit Amanuensis roadmap"
+  short_description: "Verify roadmap status against repository evidence"
+  default_prompt: "Use $audit-amanuensis-roadmap to verify that the Amanuensis roadmap matches the current implementation."

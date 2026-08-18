@@ -1,0 +1,35 @@
+default_install_hook_types:
+  - pre-commit
+  - pre-push
+  - commit-msg
+
+repos:
+  - repo: local
+    hooks:
+      - id: governance-branch-name
+        name: Validate Linear branch format
+        entry: python scripts/nakama_governance.py branch --format-only
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit, pre-push]
+
+      - id: governance-commit-message
+        name: Validate Conventional Commit message
+        entry: python scripts/nakama_governance.py commit
+        language: system
+        stages: [commit-msg]
+
+      - id: secret-scan-staged
+        name: Detect hardcoded secrets in staged changes
+        entry: mise run security:secrets:staged
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: governance-verification
+        name: Validate governance contracts
+        entry: mise run verify
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

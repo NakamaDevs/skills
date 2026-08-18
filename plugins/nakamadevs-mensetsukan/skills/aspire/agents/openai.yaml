@@ -1,0 +1,4 @@
+interface:
+  display_name: "aspire"
+  short_description: "Use the aspire workflow with Codex"
+  default_prompt: "Use $aspire to complete this task safely."

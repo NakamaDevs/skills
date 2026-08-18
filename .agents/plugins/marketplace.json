@@ -1,0 +1,116 @@
+{
+  "name": "nakamadevs",
+  "interface": {
+    "displayName": "NakamaDevs"
+  },
+  "plugins": [
+    {
+      "name": "nakamadevs-shared",
+      "source": {
+        "source": "local",
+        "path": "./plugins/nakamadevs-shared"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "nakamadevs-amanuensis",
+      "source": {
+        "source": "local",
+        "path": "./plugins/nakamadevs-amanuensis"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "nakamadevs-kaicho",
+      "source": {
+        "source": "local",
+        "path": "./plugins/nakamadevs-kaicho"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "nakamadevs-docs",
+      "source": {
+        "source": "local",
+        "path": "./plugins/nakamadevs-docs"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "nakamadevs-kantoku",
+      "source": {
+        "source": "local",
+        "path": "./plugins/nakamadevs-kantoku"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "nakamadevs-stingray",
+      "source": {
+        "source": "local",
+        "path": "./plugins/nakamadevs-stingray"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "nakamadevs-kenkyu",
+      "source": {
+        "source": "local",
+        "path": "./plugins/nakamadevs-kenkyu"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "nakamadevs-mensetsukan",
+      "source": {
+        "source": "local",
+        "path": "./plugins/nakamadevs-mensetsukan"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "nakamadevs-runner-fleet",
+      "source": {
+        "source": "local",
+        "path": "./plugins/nakamadevs-runner-fleet"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

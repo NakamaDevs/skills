@@ -1,0 +1,4 @@
+interface:
+  display_name: "ASD-STE100 Technical English"
+  short_description: "Clear technical communication with STE"
+  default_prompt: "Use $asd-ste100 to rewrite this technical communication clearly."

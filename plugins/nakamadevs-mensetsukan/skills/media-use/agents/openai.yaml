@@ -1,0 +1,6 @@
+interface:
+  display_name: "media use"
+  short_description: "Use the media use workflow with Codex"
+  default_prompt: "Use $media-use to complete this task safely."
+policy:
+  allow_implicit_invocation: false

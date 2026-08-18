@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Kaicho governance changes"
+  short_description: "Review Kaicho governance and automation"
+  default_prompt: "Use $review-kaicho-change to review this Kaicho change against the versioned governance contract."

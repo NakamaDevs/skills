@@ -1,0 +1,4 @@
+interface:
+  display_name: "mensetsukan"
+  short_description: "Use the mensetsukan workflow with Codex"
+  default_prompt: "Use $mensetsukan to complete this task safely."

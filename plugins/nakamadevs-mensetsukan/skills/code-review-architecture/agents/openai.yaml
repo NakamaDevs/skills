@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Architecture"
+  short_description: "Check boundaries, coupling, and design fit"
+  default_prompt: "Use $code-review-architecture to assess this change against the system architecture and design constraints."

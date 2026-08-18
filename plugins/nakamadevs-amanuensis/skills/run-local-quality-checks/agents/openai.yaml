@@ -1,0 +1,4 @@
+interface:
+  display_name: "Run local quality checks"
+  short_description: "Run the same local quality gates used by CI"
+  default_prompt: "Use $run-local-quality-checks to run the appropriate local quality gates and summarize failures."

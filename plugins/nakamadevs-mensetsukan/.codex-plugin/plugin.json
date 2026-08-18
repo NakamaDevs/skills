@@ -1,0 +1,18 @@
+{
+  "name": "nakamadevs-mensetsukan",
+  "version": "0.1.0",
+  "description": "Engineering and media production skills",
+  "author": {
+    "name": "NakamaDevs"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Nakamadevs Mensetsukan",
+    "shortDescription": "Build, review, test, and create",
+    "longDescription": "Skills for software design, code review, testing, browser automation, Aspire, htmx, and media production.",
+    "developerName": "NakamaDevs",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "Show the available Mensetsukan skills and help me select one."
+  }
+}

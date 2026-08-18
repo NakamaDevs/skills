@@ -1,0 +1,4 @@
+interface:
+  display_name: "hyperframes core"
+  short_description: "Use the hyperframes core workflow with Codex"
+  default_prompt: "Use $hyperframes-core to complete this task safely."

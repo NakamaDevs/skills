@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Kantoku Swift"
+  short_description: "Review the macOS Swift tray application"
+  default_prompt: "Use $review-kantoku-swift to review the Kantoku Swift tray changes."

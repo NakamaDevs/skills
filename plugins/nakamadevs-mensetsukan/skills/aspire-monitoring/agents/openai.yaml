@@ -1,0 +1,4 @@
+interface:
+  display_name: "aspire monitoring"
+  short_description: "Use the aspire monitoring workflow with Codex"
+  default_prompt: "Use $aspire-monitoring to complete this task safely."

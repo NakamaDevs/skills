@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Amanuensis Windows"
+  short_description: "Review C++, CMake, and Windows changes"
+  default_prompt: "Use $review-amanuensis-windows to review the Amanuensis Windows and C++ changes."

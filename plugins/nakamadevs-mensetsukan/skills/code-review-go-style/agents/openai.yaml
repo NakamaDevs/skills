@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Go Style"
+  short_description: "Apply authoritative Go style guidance"
+  default_prompt: "Use $code-review-go-style to review changed Go code against project and Google Go guidance."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Kantoku automation"
+  short_description: "Review CI, scripts, packaging, and releases"
+  default_prompt: "Use $review-kantoku-automation to review the Kantoku automation or release changes."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Kantoku changes"
+  short_description: "Review Elixir, Swift, and release changes"
+  default_prompt: "Use $review-kantoku-change to review this Kantoku change with the relevant stack checklist."

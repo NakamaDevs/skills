@@ -1,0 +1,18 @@
+{
+  "name": "nakamadevs-amanuensis",
+  "version": "0.1.0",
+  "description": "Amanuensis development and review skills",
+  "author": {
+    "name": "NakamaDevs"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Nakamadevs Amanuensis",
+    "shortDescription": "Build, test, and review Amanuensis",
+    "longDescription": "Skills for Amanuensis development, quality checks, releases, platform reviews, Flutter setup, and roadmap maintenance.",
+    "developerName": "NakamaDevs",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "Show the available Amanuensis skills and help me select one."
+  }
+}

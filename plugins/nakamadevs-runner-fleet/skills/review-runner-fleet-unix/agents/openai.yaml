@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Runner Fleet Unix"
+  short_description: "Review macOS, Linux, and shell automation"
+  default_prompt: "Use $review-runner-fleet-unix to review macOS, Linux, and shell runner changes."

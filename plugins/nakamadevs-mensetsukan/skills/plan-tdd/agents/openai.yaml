@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plan with TDD"
+  short_description: "Make behavior and tests lead implementation"
+  default_prompt: "Use $plan-tdd to turn the requested change into a test-first implementation plan."

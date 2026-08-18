@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Correctness"
+  short_description: "Find concrete regressions in changed behavior"
+  default_prompt: "Use $code-review-correctness to inspect this change for demonstrable correctness regressions."

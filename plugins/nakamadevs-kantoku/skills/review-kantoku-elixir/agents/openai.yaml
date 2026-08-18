@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Kantoku Elixir"
+  short_description: "Review Phoenix, Ash, Discord, and Oban"
+  default_prompt: "Use $review-kantoku-elixir to review the Kantoku Elixir and Phoenix changes."

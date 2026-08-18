@@ -1,0 +1,4 @@
+interface:
+  display_name: "Code Review Orchestrator"
+  short_description: "Route changes through focused reviewers"
+  default_prompt: "Use $code-review to run an evidence-backed review through all applicable specialist skills."
