@@ -1,0 +1,9 @@
+{
+  "name": "nakamadevs-docs",
+  "displayName": "Nakamadevs Docs",
+  "version": "0.1.0",
+  "description": "NakamaDevs documentation review skills",
+  "author": {
+    "name": "NakamaDevs"
+  }
+}

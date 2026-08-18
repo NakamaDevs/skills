@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the NakamaDevs Codex plugin marketplace."""
+"""Validate the NakamaDevs plugin marketplace for Codex and Claude Code."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PLUGINS = ROOT / "plugins"
 MARKETPLACE = ROOT / ".agents" / "plugins" / "marketplace.json"
+CLAUDE_MARKETPLACE = ROOT / ".claude-plugin" / "marketplace.json"
 RISKY_SKILLS = {
     "aspire-deployment",
     "aspire-init",
@@ -90,6 +91,39 @@ def validate_skill(skill_dir: Path) -> None:
         fail(f"{metadata_file.relative_to(ROOT)} must require explicit invocation")
 
 
+def validate_claude_catalog(plugin_names: set[str]) -> None:
+    """Check that the Claude Code manifests match the Codex manifests."""
+    marketplace = load_json(CLAUDE_MARKETPLACE)
+    entries = marketplace.get("plugins")
+    if not isinstance(entries, list):
+        fail("Claude marketplace plugins must be a list")
+    listed: set[str] = set()
+    for entry in entries:
+        if not isinstance(entry, dict) or not isinstance(entry.get("name"), str):
+            fail("each Claude marketplace plugin needs a name")
+        name = entry["name"]
+        if entry.get("source") != f"./plugins/{name}":
+            fail(f"{name} must use its local Claude marketplace path")
+        listed.add(name)
+    if listed != plugin_names:
+        fail("Claude marketplace entries must match plugin directories")
+
+    for name in sorted(plugin_names):
+        manifest_path = PLUGINS / name / ".claude-plugin" / "plugin.json"
+        if not manifest_path.is_file():
+            fail(f"{manifest_path.relative_to(ROOT)} is missing")
+        manifest = load_json(manifest_path)
+        if manifest.get("name") != name:
+            fail(f"{name} Claude manifest name does not match its directory")
+        codex = load_json(PLUGINS / name / ".codex-plugin" / "plugin.json")
+        if manifest.get("version") != codex.get("version"):
+            fail(f"{name} Claude and Codex manifest versions differ")
+        if manifest.get("description") != codex.get("description"):
+            fail(f"{name} Claude and Codex manifest descriptions differ")
+        if "skills" in manifest:
+            fail(f"{name} Claude manifest must use the default ./skills/ path")
+
+
 def main() -> None:
     marketplace = load_json(MARKETPLACE)
     entries = marketplace.get("plugins")
@@ -129,10 +163,15 @@ def main() -> None:
 
     if len(seen) != 69:
         fail(f"expected 69 unique skills, found {len(seen)}")
+    validate_claude_catalog(directories)
+
     missing_risky = RISKY_SKILLS - seen.keys()
     if missing_risky:
         fail(f"risk policy names missing from catalog: {sorted(missing_risky)}")
-    print(f"catalog: valid ({len(directories)} plugins, {len(seen)} skills)")
+    print(
+        f"catalog: valid ({len(directories)} plugins, {len(seen)} skills, "
+        "Codex and Claude Code manifests)"
+    )
 
 
 if __name__ == "__main__":
