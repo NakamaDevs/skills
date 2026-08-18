@@ -10,7 +10,7 @@ Produce an English, evidence-traceable topic dossier. Separate what happened fro
 ## Workflow
 
 1. Read `references/source-policy.md`, `references/output-structure.md`, and `references/prompt-contract.md`.
-2. Inspect the repository and avoid overwriting an existing topic. For a new topic, run `scripts/new_topic.py` with a stable English slug and title. The generator creates the modular topic tree and registers it in `topics/catalog.json`.
+2. Inspect the repository and avoid overwriting an existing topic. For a new topic, run `tools/research/new_topic.py` with a stable English slug and title.
 3. Run the staged prompting contract. Persist the research program before discovery. Then persist every downstream stage before publishing prose.
 4. Search in this order:
    - official announcements, documentation, code repositories, and system cards;
@@ -20,7 +20,7 @@ Produce an English, evidence-traceable topic dossier. Separate what happened fro
 5. Search for counterevidence and earlier precedents. Do not infer causation from publication order alone.
 6. Record every consequential source in `data/curated/sources.json`. Map observations to sources, sources to claims, and claims to artifacts with stable IDs.
 7. Write modular English documents following `references/output-structure.md`. Cite externally verifiable statements in the same paragraph or table row. Keep `index.md` navigational; place synthesis, arguments, evidence, chronology, and data in their dedicated files.
-8. Declare only direct citations in each artifact's `source_ids`. Build `data/products/lineage.json` with `scripts/build_lineage.py`. Run `mise run verify`, then validate the topic ledger with `scripts/validate_sources.py`.
+8. Declare only direct citations in each artifact's `source_ids`. Build `data/products/lineage.json` with `tools/research/build_lineage.py`. Run `mise run verify`, then validate the topic ledger.
 9. Run the adversarial refinement prompt before finalizing. Correct overclaims, missing contradictions, orphan mappings, and stale lineage.
 10. On refreshes, update `topics/catalog.json`, the topic `index.md`, and relevant data layers; add a dated note under `updates/`. Preserve earlier conclusions and explain what new evidence changed.
 
@@ -46,13 +46,13 @@ Produce an English, evidence-traceable topic dossier. Separate what happened fro
 Create a topic skeleton:
 
 ```bash
-python3 scripts/new_topic.py --root <repo> --slug <slug> --title <title>
+python3 tools/research/new_topic.py --root <repo> --slug <slug> --title <title>
 ```
 
 Validate the source ledger:
 
 ```bash
-python3 scripts/validate_sources.py <topic>/data/curated/sources.json
+python3 tools/research/validate_sources.py <topic>/data/curated/sources.json
 ```
 
 Validate the archive structure and catalog:
@@ -64,12 +64,12 @@ mise run verify
 Build or check lineage:
 
 ```bash
-python3 scripts/build_lineage.py <topic>
-python3 scripts/build_lineage.py <topic> --check
+python3 tools/research/build_lineage.py <topic>
+python3 tools/research/build_lineage.py <topic> --check
 ```
 
 Trace lineage in either direction:
 
 ```bash
-python3 scripts/trace_lineage.py <topic> --id <node-id> --direction upstream
+python3 tools/research/trace_lineage.py <topic> --id <node-id> --direction upstream
 ```
