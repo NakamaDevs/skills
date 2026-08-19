@@ -46,6 +46,23 @@ See the official [plugin reference](https://code.claude.com/docs/en/plugins-refe
 | `nakamadevs-mensetsukan` | Engineering, testing, browser, design, and media workflows |
 | `nakamadevs-runner-fleet` | Runner fleet review and rollout workflows |
 
+## Runner requirements
+
+The repository has one workflow job:
+
+| Workflow job | Lane today | Lane needed | Hard requirement | Host prerequisite |
+| --- | --- | --- | --- | --- |
+| `verify` | `nakama-linux-x64` (`nakama-dependabot-linux-x64` for Dependabot) | `nakama-linux-x64` | Server-only checks only. No Xcode, iOS, Android, GPU, container runtime, or Windows SDK needed. | Bash shell, git, and network. `actionlint`, `gitleaks`, and `python` are installed by `mise`. |
+
+No repository check currently needs macOS or Windows SDKs, simulators, or GPU runtime. If checks add such needs later, place them on the matching host lane.
+
+Known past decisions:
+- `7e0e00e` added `.github/workflows/ci.yml` with `# nakama-workload: server-only` and Linux runner labels.
+- `scripts/nakama_governance.py` maps `server-only` to `nakama-linux-x64`.
+- The same script self-test keeps a `safe_server_workflow` definition and rejects its unsafe variants.
+
+Do not run anything here on Windows-only lanes. Current checks do not need Windows tooling.
+
 ## One skill, two tools
 
 Each skill has one `SKILL.md` file.
