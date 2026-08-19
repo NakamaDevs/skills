@@ -17,8 +17,11 @@ import urllib.request
 from pathlib import Path
 from typing import NoReturn
 
-CLI_VERSION = "1.1.0"
+CLI_VERSION = "1.2.0"
 TYPES = "feat|fix|docs|refactor|test|build|ci|chore|perf|style|revert"
+# Branch prefixes accept every commit type. "feature" stays as a legacy alias and
+# must precede "feat" so the longer prefix matches first.
+BRANCH_TYPES = f"feature|{TYPES}"
 COMMIT_PATTERN = re.compile(rf"^({TYPES})(\([a-z0-9][a-z0-9-]*\))?!?: \S.*$")
 EXACT_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[+-][A-Za-z0-9_.-]+)?$")
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -91,8 +94,8 @@ def validate_branch_format(branch: str, policy: dict[str, str]) -> str | None:
     if branch in protected:
         return None
     team = re.escape(policy["LINEAR_TEAM_KEY"])
-    human = rf"^(feature|fix)/[a-z0-9]+(?:-[a-z0-9]+)*-{team}-[1-9][0-9]*-[a-z0-9]+(?:-[a-z0-9]+)*$"
-    agent = rf"^(feature|fix)/cx/{team}-[1-9][0-9]*-[a-z0-9]+(?:-[a-z0-9]+)*$"
+    human = rf"^(?:{BRANCH_TYPES})/[a-z0-9]+(?:-[a-z0-9]+)*-{team}-[1-9][0-9]*-[a-z0-9]+(?:-[a-z0-9]+)*$"
+    agent = rf"^(?:{BRANCH_TYPES})/cx/{team}-[1-9][0-9]*-[a-z0-9]+(?:-[a-z0-9]+)*$"
     if re.fullmatch(rf"(?:{human})|(?:{agent})", branch):
         return None
     return f"Invalid branch name: {branch}"
@@ -144,8 +147,8 @@ def command_branch(args: argparse.Namespace) -> None:
         team = policy["LINEAR_TEAM_KEY"]
         print(error, file=sys.stderr)
         print(
-            f"Use feature/username-{team}-123-description, fix/username-{team}-123-description, "
-            f"feature/cx/{team}-123-description, or fix/cx/{team}-123-description.",
+            f"Use <type>/username-{team}-123-description or <type>/cx/{team}-123-description.",
+            f"Types: {BRANCH_TYPES.replace('|', ', ')}.",
             file=sys.stderr,
         )
         raise SystemExit(1)
@@ -575,13 +578,18 @@ def command_self_test(_: argparse.Namespace) -> None:
         "fix/hector-dd-NAK-5-branch-governance",
         "feature/cx/NAK-5-branch-governance",
         "fix/cx/NAK-5-branch-governance",
+        "feat/cx/NAK-5-branch-governance",
+        "docs/cx/NAK-5-branch-governance",
+        "chore/hectorddmx-NAK-5-branch-governance",
+        "revert/cx/NAK-5-branch-governance",
         "main",
     )
     failing = (
         "feature/NAK-5-branch-governance",
         "fix/cx/hectorddmx-NAK-5-branch-governance",
         "feature/cx/missing-ticket",
-        "chore/hectorddmx-NAK-5-branch-governance",
+        "chores/hectorddmx-NAK-5-branch-governance",
+        "release/cx/NAK-5-branch-governance",
         "fix/cx/nak-5-branch-governance",
     )
     if any(validate_branch_format(value, policy) for value in passing):
