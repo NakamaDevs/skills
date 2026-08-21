@@ -1,102 +1,83 @@
-# NakamaDevs skill catalog
+# NakamaDevs Agent Skills
 
-This repository is the private skill catalog for NakamaDevs.
-Codex and Claude Code both install from it.
-Kaicho remains the source for organization policy.
-This repository contains reusable agent workflows only.
+This repository contains reusable Agent Skills for NakamaDevs.
+It uses the open Vercel Skills ecosystem.
 
-## Install the marketplace in Codex
+## Install
 
-Run this command in Codex CLI or the Codex desktop app:
+List available skills:
 
-```text
-codex plugin marketplace add NakamaDevs/codex-skills --ref main
+```sh
+npx skills add NakamaDevs/skills --list
 ```
 
-Open `/plugins` and install the required plugin.
-Start a new Codex session after installation.
-Codex IDE extensions do not support plugins at this time.
-See the official [plugin documentation](https://developers.openai.com/plugins/build/plugins).
-See the official [skill documentation](https://learn.chatgpt.com/docs/build-skills).
+Install all skills for Codex:
 
-## Install the marketplace in Claude Code
-
-Run these commands in Claude Code:
-
-```text
-/plugin marketplace add NakamaDevs/codex-skills
-/plugin install nakamadevs-shared@nakamadevs
+```sh
+npx skills add NakamaDevs/skills --skill '*' --global --agent codex --yes
 ```
 
-Install other plugins in the same way.
-Start a new Claude Code session after installation.
-See the official [plugin reference](https://code.claude.com/docs/en/plugins-reference).
+Install selected skills for several agents:
 
-## Plugin groups
+```sh
+npx skills add NakamaDevs/skills \
+  --skill nakama-review-change \
+  --skill nakama-write-plain-language \
+  --global \
+  --agent codex \
+  --agent claude-code \
+  --yes
+```
 
-| Plugin | Purpose |
-| --- | --- |
-| `nakamadevs-shared` | Shared delivery, governance, review, writing, and orchestration workflows |
-| `nakamadevs-amanuensis` | Amanuensis development and review workflows |
-| `nakamadevs-kaicho` | Kaicho governance review |
-| `nakamadevs-docs` | Organization documentation review |
-| `nakamadevs-kantoku` | Kantoku development review |
-| `nakamadevs-stingray` | Playwright browser automation |
-| `nakamadevs-kenkyu` | Emerging technology research |
-| `nakamadevs-mensetsukan` | Engineering, testing, browser, design, and media workflows |
-| `nakamadevs-runner-fleet` | Runner fleet review and rollout workflows |
+The workspace root provides the same workflow:
 
-## Runner requirements
+```sh
+mise run install:skills
+```
 
-The repository has one workflow job:
+The default task installs all skills globally for Codex.
+Set `SKILLS` to a space-separated list to install selected skills.
+Set `SKILLS_AGENTS` to a space-separated agent list.
 
-| Workflow job | Lane today | Lane needed | Hard requirement | Host prerequisite |
-| --- | --- | --- | --- | --- |
-| `verify` | `nakama-linux-x64` (`nakama-dependabot-linux-x64` for Dependabot) | `nakama-linux-x64` | Server-only checks only. No Xcode, iOS, Android, GPU, container runtime, or Windows SDK needed. | Bash shell, git, and network. `actionlint`, `gitleaks`, and `python` are installed by `mise`. |
+## Structure
 
-No repository check currently needs macOS or Windows SDKs, simulators, or GPU runtime. If checks add such needs later, place them on the matching host lane.
+Every skill uses this layout:
 
-Known past decisions:
-- `7e0e00e` added `.github/workflows/ci.yml` with `# nakama-workload: server-only` and Linux runner labels.
-- `scripts/nakama_governance.py` maps `server-only` to `nakama-linux-x64`.
-- The same script self-test keeps a `safe_server_workflow` definition and rejects its unsafe variants.
+```text
+skills/
+  skill-name/
+    SKILL.md
+    agents/       optional agent metadata
+    scripts/      optional executable helpers
+    references/   optional supporting material
+    assets/       optional templates or media
+```
 
-Do not run anything here on Windows-only lanes. Current checks do not need Windows tooling.
+`SKILL.md` must start with YAML frontmatter.
+The frontmatter must contain a unique lowercase `name` and a `description`.
 
-## One skill, two tools
+The Vercel CLI discovers skills in `skills/<name>/SKILL.md`.
+The CLI installs project skills into agent-specific project directories.
+The CLI installs global skills into agent-specific user directories.
 
-Each skill has one `SKILL.md` file.
-Codex and Claude Code both read it.
-Only the plugin metadata differs:
+## Development
 
-| Part | Codex | Claude Code |
-| --- | --- | --- |
-| Marketplace | `.agents/plugins/marketplace.json` | `.claude-plugin/marketplace.json` |
-| Plugin manifest | `<plugin>/.codex-plugin/plugin.json` | `<plugin>/.claude-plugin/plugin.json` |
-| Skills path | `"skills": "./skills/"` | discovered from `skills/` |
-| Skill metadata | `skills/<name>/agents/openai.yaml` | not used |
+Run the catalog checks:
 
-Do not copy a skill to add a tool.
-Add the metadata for that tool instead.
+```sh
+mise run verify:quick
+```
 
-## Repository use
+Run all checks:
 
-A repository must not copy these skills.
-Install the marketplace once, then install the required plugin.
-Repository `AGENTS.md` files can name installed skills with `$skill-name`.
-Claude Code invokes the same skill with `/plugin-name:skill-name`.
-Repository instructions must not depend on an uninstalled skill.
+```sh
+mise run verify
+```
 
-## Safety
+Record imported sources and exact revisions in [SOURCES.md](SOURCES.md).
+Keep third-party licenses beside imported content.
 
-Imported skills have pinned source revisions in [SOURCES.md](SOURCES.md).
-The catalog rejects missing metadata and non-portable tool declarations.
-Skills that change systems require explicit invocation in Codex.
-Claude Code has no equivalent catalog control at this time.
-Run `mise run verify` before each pull request.
+## Policy
 
-## License
-
-Each imported skill retains its source license.
-Embedded license files apply to their skill directories.
-See [SOURCES.md](SOURCES.md) for provenance.
+Kaicho defines the organization policy for skill creation and installation.
+This repository contains the reusable skill content.

@@ -1,12 +1,12 @@
 schema_version = 1
-repository = "NakamaDevs/codex-skills"
+repository = "NakamaDevs/skills"
 kind = "single"
 governance_version = "1.7.0"
 
 [skills]
-bundle = "nakamadevs-shared"
-version = "0.1.0"
-source = "https://github.com/NakamaDevs/codex-skills.git"
+bundle = "NakamaDevs/skills"
+version = "1.0.0"
+source = "https://github.com/NakamaDevs/skills.git"
 revision = "self"
 
 [linear]

@@ -229,10 +229,6 @@ def load_context(root: Path) -> dict[str, object]:
 def command_agent(_: argparse.Namespace) -> None:
     root = repository_root()
     context = load_context(root)
-    marketplace_path = root / ".agents" / "plugins" / "marketplace.json"
-    if not marketplace_path.is_file():
-        fail("agent contract: missing .agents/plugins/marketplace.json")
-    marketplace = json.loads(marketplace_path.read_text(encoding="utf-8"))
     required_top = ("schema_version", "repository", "kind", "governance_version")
     required_sections = {
         "skills": ("bundle", "version", "source", "revision"),
@@ -256,22 +252,13 @@ def command_agent(_: argparse.Namespace) -> None:
     revision = str(skills["revision"])
     version = str(skills["version"])
     if revision == "self":
-        manifest_path = root / "plugins" / str(skills["bundle"]) / ".codex-plugin" / "plugin.json"
-        if not manifest_path.is_file():
-            fail("agent contract: self-hosted skills require the local plugin manifest")
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if manifest.get("version") != version:
-            fail("agent contract: plugin version does not match repository context")
+        if not (root / "skills").is_dir():
+            fail("agent contract: self-hosted skills require the local skills directory")
+        if not (root / "scripts" / "validate_catalog.py").is_file():
+            fail("agent contract: self-hosted skills require the catalog validator")
     else:
         if not FULL_SHA.fullmatch(revision):
             fail("agent contract: skills revision must be an exact 40-character commit SHA")
-        plugins = marketplace.get("plugins") or []
-        source = next(
-            (item.get("source", {}) for item in plugins if item.get("name") == skills.get("bundle")),
-            {},
-        )
-        if source.get("source") != "git-subdir" or source.get("sha") != revision:
-            fail("agent contract: marketplace git-subdir SHA does not match repository context")
     print(f"agent contract: valid ({version} at {revision})")
 
 

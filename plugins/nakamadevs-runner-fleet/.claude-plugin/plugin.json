@@ -1,9 +1,0 @@
-{
-  "name": "nakamadevs-runner-fleet",
-  "displayName": "Nakamadevs Runner Fleet",
-  "version": "0.1.0",
-  "description": "Runner fleet operations and review skills",
-  "author": {
-    "name": "NakamaDevs"
-  }
-}

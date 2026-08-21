@@ -14,7 +14,7 @@ Third-party license files remain beside their imported content.
 | `NakamaDevs/kenkyu` | `b7aa15672857881b53cd1aba41174715614ac10e` | Technology research skill |
 | `NakamaDevs/mensetsukan` | `6d19dd8467da88acaef9a3cfc0193a4f070543b5` | Engineering and media skills |
 | `NakamaDevs/runner-fleet` | `4aac877097e4607acf15d957ed184e4e66cf9cde` | Runner fleet skills |
-| `provencher/codex-skills` | `8aa6c42b73781c905c55f8a1253a18127079ac21` | `orchestrate` |
+| `provencher/skills` | `8aa6c42b73781c905c55f8a1253a18127079ac21` | `orchestrate` |
 
 The `orchestrate` skill uses the MIT License.
 Copyright 2026 Eric Provencher.
@@ -23,7 +23,7 @@ Its license is stored beside the skill.
 Some Mensetsukan skills derive from public skill packs.
 The Aspire skill pack uses the MIT License.
 The HyperFrames skill pack uses the Apache License 2.0.
-Their licenses are in `plugins/nakamadevs-mensetsukan/third-party-licenses`.
+Their licenses are in `third-party-licenses/`.
 
 The Playwright CLI skill derives from `microsoft/playwright-cli`.
 It uses the Apache License 2.0.
