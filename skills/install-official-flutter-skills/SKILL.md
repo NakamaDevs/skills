@@ -5,28 +5,30 @@ description: Fetch and install the official Flutter Agent Skills bundle, includi
 
 # Install Official Flutter Skills
 
-Install from the Flutter-team-maintained `flutter/agent-plugins` repository. Its
-current catalog includes the official Flutter skills and the Dart skills they
-depend on.
+Install the official Flutter skills from `flutter/agent-plugins`. Install
+official Dart skills from `dart-lang/skills` when the task needs them. Do not
+copy either upstream into the NakamaDevs catalog.
 
 ## Workflow
 
 1. Read [references/sources.md](references/sources.md) and confirm Codex as the
    target.
 2. Ensure the repository's pinned Node.js is available with `mise install`.
-3. List the source contents before installing:
+3. Select the Flutter or Dart source. List its contents before installing:
 
 ```sh
 npx skills@1.5.17 add flutter/agent-plugins --list
+npx skills@1.5.17 add dart-lang/skills --list
 ```
 
 4. Ask before the global write. Skills contain instructions and may contain
    executable resources, so treat installation as code installation.
 5. Install copied files at user scope. Copies work consistently on Windows,
-   where symlink creation can require additional privileges:
+where symlink creation can require additional privileges:
 
 ```sh
 npx skills@1.5.17 add flutter/agent-plugins --skill '*' --global --copy --yes --agent codex
+npx skills@1.5.17 add dart-lang/skills --skill '*' --global --copy --yes --agent codex
 ```
 
 The equivalent repository task is:
@@ -42,6 +44,7 @@ mise run skills:flutter:install
 
 ## Update Policy
 
-Re-run the pinned installation task after reviewing upstream changes. Do not
+Re-run the pinned installation task after reviewing upstream changes. For a
+repeatable install, use a reviewed full commit SHA in the source URL. Do not
 silently track an unpinned installer or replace official skills with similarly
 named community packages.

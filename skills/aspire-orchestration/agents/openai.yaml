@@ -1,6 +1,0 @@
-interface:
-  display_name: "aspire orchestration"
-  short_description: "Use the aspire orchestration workflow with Codex"
-  default_prompt: "Use $aspire-orchestration to complete this task safely."
-policy:
-  allow_implicit_invocation: false

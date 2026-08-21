@@ -1,4 +1,0 @@
-interface:
-  display_name: "open pencil"
-  short_description: "Use the open pencil workflow with Codex"
-  default_prompt: "Use $open-pencil to complete this task safely."

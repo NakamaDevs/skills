@@ -1,4 +1,0 @@
-interface:
-  display_name: "hyperframes registry"
-  short_description: "Use the hyperframes registry workflow with Codex"
-  default_prompt: "Use $hyperframes-registry to complete this task safely."

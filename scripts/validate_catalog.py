@@ -11,6 +11,29 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "skills"
 NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+EXTERNAL_SKILLS = {
+    "aspire",
+    "aspire-deployment",
+    "aspire-init",
+    "aspire-monitoring",
+    "aspire-orchestration",
+    "aspireify",
+    "general-video",
+    "herdr",
+    "htmx",
+    "hyperframes",
+    "hyperframes-animation",
+    "hyperframes-audio",
+    "hyperframes-cli",
+    "hyperframes-core",
+    "hyperframes-creative",
+    "hyperframes-keyframes",
+    "hyperframes-registry",
+    "media-use",
+    "open-pencil",
+    "orchestrate",
+    "playwright-cli",
+}
 
 
 def fail(message: str) -> None:
@@ -52,12 +75,12 @@ def main() -> None:
         fail("skills directory is empty")
     seen: set[str] = set()
     for skill_dir in skill_dirs:
+        if skill_dir.name in EXTERNAL_SKILLS:
+            fail(f"{skill_dir.relative_to(ROOT)} must be installed from its upstream")
         if skill_dir.name in seen:
             fail(f"duplicate skill {skill_dir.name}")
         seen.add(skill_dir.name)
         validate_skill(skill_dir)
-    if len(seen) != 69:
-        fail(f"expected 69 unique skills, found {len(seen)}")
     print(f"catalog: valid ({len(seen)} skills in skills/)")
 
 

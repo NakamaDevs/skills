@@ -1,6 +1,0 @@
-interface:
-  display_name: "aspireify"
-  short_description: "Use the aspireify workflow with Codex"
-  default_prompt: "Use $aspireify to complete this task safely."
-policy:
-  allow_implicit_invocation: false
