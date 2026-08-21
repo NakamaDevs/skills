@@ -1,4 +1,0 @@
-interface:
-  display_name: "hyperframes creative"
-  short_description: "Use the hyperframes creative workflow with Codex"
-  default_prompt: "Use $hyperframes-creative to complete this task safely."

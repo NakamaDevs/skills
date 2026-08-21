@@ -30,7 +30,8 @@ Record for each state: trigger, visible information, available actions, protecte
 
 ## Use OpenPencil for artifacts
 
-Read `.agents/skills/open-pencil/SKILL.md` completely before using OpenPencil. Use it after the flow and state model are explicit.
+Install `open-pencil` from `NakamaDevs/open-pencil-skills` before using it. Read
+its `SKILL.md` after the flow and state model are explicit.
 
 - Inspect an existing `.fig` file or running editor before changing it.
 - Prefer a low-fidelity flow or component-state board before polished screens.

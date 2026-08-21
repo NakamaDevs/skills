@@ -1,6 +1,0 @@
-interface:
-  display_name: "aspire init"
-  short_description: "Use the aspire init workflow with Codex"
-  default_prompt: "Use $aspire-init to complete this task safely."
-policy:
-  allow_implicit_invocation: false

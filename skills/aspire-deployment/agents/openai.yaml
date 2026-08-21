@@ -1,6 +1,0 @@
-interface:
-  display_name: "aspire deployment"
-  short_description: "Use the aspire deployment workflow with Codex"
-  default_prompt: "Use $aspire-deployment to complete this task safely."
-policy:
-  allow_implicit_invocation: false

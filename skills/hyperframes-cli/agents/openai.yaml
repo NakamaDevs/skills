@@ -1,6 +1,0 @@
-interface:
-  display_name: "hyperframes cli"
-  short_description: "Use the hyperframes cli workflow with Codex"
-  default_prompt: "Use $hyperframes-cli to complete this task safely."
-policy:
-  allow_implicit_invocation: false
