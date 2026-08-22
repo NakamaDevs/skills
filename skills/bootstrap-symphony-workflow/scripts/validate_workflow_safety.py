@@ -28,7 +28,9 @@ REQUIRED_PROMPT_DENIALS = {
     "public-ingress",
 }
 UNSAFE_PROMPT_PATTERNS = {
-    "merge": re.compile(r"\b(?:merge|land)\b", re.IGNORECASE),
+    "merge": re.compile(
+        r"\b(?:merg(?:e|ed|es|ing)|land(?:ed|ing|s)?)\b", re.IGNORECASE
+    ),
     "deploy": re.compile(r"\bdeploy(?:ed|ing|ment|ments|s)?\b", re.IGNORECASE),
     "release": re.compile(r"\breleas(?:e|ed|es|ing)\b", re.IGNORECASE),
     "production-effects": re.compile(r"\b(?:production|prod)\b", re.IGNORECASE),
