@@ -1,7 +1,8 @@
 # Pilot test plan
 
-Use this plan with controls C4 through C11 from Kaicho commit
-`1367d6b2b303d51e95fa6c1681b1dfcc6ca15d0b`. Record commands and results.
+Use this plan with controls C4 through C11 from the pinned Kaicho
+[control source](https://github.com/NakamaDevs/Kaicho/blob/1367d6b2b303d51e95fa6c1681b1dfcc6ca15d0b/docs/governance/harness-and-orchestration-controls.md).
+Record commands and results.
 Do not copy credential values or full provider payloads into evidence.
 
 ## Test identity
@@ -54,18 +55,15 @@ Test `stop one run` and `stop all dispatch` separately. For each test, record:
 
 Do not use a code change, release, or redeploy as the stop action.
 
-## Live pilot gate
+## Live pilot execution
 
-Before dispatch, confirm these facts:
-
-- one low-risk issue has the required pilot label;
-- the issue excludes release, deployment, security, credential, and billing
-  work;
-- the operator authorizes this exact attempt and closed effect set;
-- no production credential enters the agent environment;
-- the independent reviewer is available.
-
-Stop the run at human review. Do not merge.
+1. Read the authorization gate directly from the pinned Kaicho control source.
+2. Build the attempt gate from the current canonical controls.
+3. Record the source revision, control IDs, evidence links, and gate result.
+4. Do not copy the canonical requirements into this reference or the evidence.
+5. If the canonical gate blocks the attempt, record the result and stop.
+6. If the gate passes, run the authorized attempt and capture event identifiers
+   with UTC times.
 
 ## Handoff evidence
 

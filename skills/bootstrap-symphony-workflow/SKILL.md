@@ -15,7 +15,7 @@ pilot gates pass.
 - The workspace-root environment name.
 - The fixed operations, tool interface, and environment name for the
   repository-scoped Git broker.
-- The local validation commands and the human-review handoff state.
+- The local validation commands and the repository's actual review state.
 
 Use Kaicho commit `1367d6b2b303d51e95fa6c1681b1dfcc6ca15d0b` as the
 canonical [control source](https://github.com/NakamaDevs/Kaicho/blob/1367d6b2b303d51e95fa6c1681b1dfcc6ca15d0b/docs/governance/harness-and-orchestration-controls.md).
@@ -35,11 +35,14 @@ runtime behavior.
 6. Route all Git effects through the declared repository-scoped broker.
 7. Keep credential values out of the file. Use host-side environment
    references.
-8. Run `scripts/validate_workflow_safety.py` from this skill against the file.
+8. Run `scripts/validate_workflow_safety.py` against the file. Pass the actual
+   review state with `--handoff-state`. Keep that state outside active and
+   terminal states.
 9. Run the repository checks and review the final diff.
 
-The prompt must stop at human review. It must prohibit merge, force push,
-release, deployment, production writes, public ingress, and credential access.
+The prompt must stop at the configured review state. It must prohibit merge,
+force push, release, deployment, production writes, public ingress, and
+credential access.
 
 ## Permitted tools
 

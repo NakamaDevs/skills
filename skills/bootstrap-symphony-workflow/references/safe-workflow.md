@@ -8,9 +8,12 @@ The Symphony format source is `openai/symphony` commit
 
 - [Service specification](https://github.com/openai/symphony/blob/8001b52e3062495a16e520e4ceaf8f9de868c4d0/SPEC.md)
 - [Reference implementation](https://github.com/openai/symphony/blob/8001b52e3062495a16e520e4ceaf8f9de868c4d0/elixir/README.md)
+- [Elixir workflow template](https://github.com/openai/symphony/blob/8001b52e3062495a16e520e4ceaf8f9de868c4d0/elixir/WORKFLOW.md)
 
-The reference repository's `WORKFLOW.md` uses a high-trust example. Do not copy
-its approval, network, concurrency, merge, or deployment settings.
+The draft front matter below mirrors the Elixir template schema. The safety
+values come from the pinned Kaicho controls. The reference workflow uses a
+high-trust example. Do not copy its prompt text or its approval, network,
+concurrency, merge, or deployment settings.
 
 ## Draft front matter
 
@@ -65,8 +68,10 @@ codex:
 ---
 ```
 
-Keep the human-review state outside `active_states` and `terminal_states`.
-Symphony then stops the run without terminal workspace cleanup.
+Pass the repository's actual review state to the validator with
+`--handoff-state`. Nakama repositories use `--handoff-state "In Review"`.
+Keep the chosen state outside `active_states` and `terminal_states`. Symphony
+then stops the run without terminal workspace cleanup.
 
 The broker commands are fixed operations. They must not accept raw command
 strings, repository paths, branch names, or shell escapes from issue content.
@@ -74,7 +79,29 @@ The runtime must prove the broker boundary before dispatch.
 
 ## Prompt requirements
 
-The Markdown body must do these tasks:
+Start the Markdown body with this supervision contract structure:
+
+````markdown
+```symphony-supervision
+stop-at: Human Review
+deny: merge
+deny: deploy
+deny: release
+deny: production-effects
+deny: credential-changes
+deny: public-ingress
+```
+````
+
+`Human Review` is only the illustrative validator default. Replace it with the
+repository's actual review state. The `stop-at` value must equal the value in
+`--handoff-state`.
+
+The validator requires each control. It rejects these effect terms elsewhere
+in the prompt. This rule prevents later instructions from contradicting the
+contract.
+
+After the contract, the Markdown body must do these tasks:
 
 1. Name the issue with `{{ issue.identifier }}` and include the attempt.
 2. Limit work to the current repository and workspace.
@@ -82,10 +109,7 @@ The Markdown body must do these tasks:
 4. Require the repository-scoped Git broker for every Git effect.
 5. Run the documented local validation ladder in order.
 6. Check the current attempt authorization before each external mutation.
-7. Stop at the named human-review state.
-8. Record sanitized evidence without credential values or full payloads.
-9. Prohibit merge, force push, public ingress, release, deployment, production
-   effects, and credential disclosure.
+7. Record sanitized evidence without values or full provider payloads.
 
 List permitted remote effects as a closed set. Keep them within the run's own
 branch, pull request, and Linear issue.
