@@ -49,3 +49,18 @@ differences. Keep the upstream license beside the copied files.
 | `NakamaDevs/runner-fleet` | `4aac877097e4607acf15d957ed184e4e66cf9cde` | Runner fleet skills |
 Migration changes only adapt integrations to Codex.
 They also add Codex interface metadata and explicit invocation controls.
+
+## Maintained skill sources
+
+| Source | Revision | Local content |
+| --- | --- | --- |
+| `NakamaDevs/Kaicho` | `1367d6b2b303d51e95fa6c1681b1dfcc6ca15d0b` | Symphony repository audit, bootstrap, and pilot validation skills |
+
+## Reference-only sources
+
+These sources define an interface or behavior. This repository does not copy
+their content.
+
+| Source | Revision | Use |
+| --- | --- | --- |
+| `openai/symphony` | `8001b52e3062495a16e520e4ceaf8f9de868c4d0` | `WORKFLOW.md` schema and runtime behavior |

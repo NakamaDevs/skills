@@ -23,7 +23,7 @@ run = "python scripts/nakama_governance.py secrets staged"
 run = ["python scripts/nakama_governance.py self-test", "python scripts/nakama_governance.py runner-policy", "python scripts/nakama_governance.py pr-branch", "python scripts/nakama_governance.py pr-title"]
 
 [tasks."catalog:test"]
-run = "python scripts/validate_catalog.py"
+run = ["python scripts/validate_catalog.py", "python -m unittest discover -s tests"]
 
 [tasks."verify:quick"]
 run = ["mise run governance:test", "mise run catalog:test", "actionlint"]

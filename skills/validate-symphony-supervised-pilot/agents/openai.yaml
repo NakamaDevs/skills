@@ -1,0 +1,4 @@
+interface:
+  display_name: "Validate Symphony Supervised Pilot"
+  short_description: "Test one restricted Symphony pilot"
+  default_prompt: "Use $validate-symphony-supervised-pilot to preflight and validate one supervised low-risk pilot."
