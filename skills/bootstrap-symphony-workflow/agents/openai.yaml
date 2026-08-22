@@ -1,0 +1,4 @@
+interface:
+  display_name: "Bootstrap Symphony Workflow"
+  short_description: "Create a restricted repository workflow"
+  default_prompt: "Use $bootstrap-symphony-workflow to create a restricted WORKFLOW.md for one supervised pilot."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Audit Symphony Repository Readiness"
+  short_description: "Audit one repository before a Symphony pilot"
+  default_prompt: "Use $audit-symphony-repository-readiness to audit this repository for a supervised Symphony pilot."
