@@ -796,58 +796,42 @@ defmodule LaneTaskEnvelopeTest do
       assert "live_smoke is required when affects_runtime is true" in errors(envelope)
     end
 
-    test "live_smoke must be a valid command object when affects_runtime is true" do
-      envelope =
-        @valid
-        |> Map.put("affects_runtime", true)
-        |> Map.put("live_smoke", %{"command" => "curl localhost", "timeout_ms" => 5000})
-
-      assert "live_smoke.command must be an argv list, not a shell string" in errors(envelope)
-    end
-
-    test "live_smoke passes command safety rules when affects_runtime is true" do
-      envelope =
-        @valid
-        |> Map.put("affects_runtime", true)
-        |> Map.put("live_smoke", %{
-          "command" => ["curl", "-fsS", "http://localhost:4000/health"],
-          "timeout_ms" => 5000
-        })
-
-      assert [] == errors(envelope)
-    end
-
     test "live_smoke must be absent when affects_runtime is false" do
       envelope =
         Map.put(@valid, "live_smoke", %{
-          "command" => ["curl", "-fsS", "http://localhost:4000/health"],
+          "endpoint" => %{"url" => "http://localhost:4000/health", "expect_status" => 200},
           "timeout_ms" => 5000
         })
 
       assert "live_smoke must be absent when affects_runtime is false" in errors(envelope)
     end
 
-    # The probe contract is a positive allow-list: live_smoke.command must
-    # resolve to one of a small set of known observability tools, not
-    # merely avoid a denylist. echo and printf always succeed and print
-    # whatever text they're given without observing anything running —
-    # exactly the kind of command a denylist-only check would miss.
-    allowlist_message =
-      "live_smoke.command must use an allow-listed observable probe binary (curl, grpc_health_probe, nc, ncat, wget)"
+    # live_smoke.command was removed entirely, not narrowed to an
+    # allow-list: an allow-list keyed on a resolved executable's basename
+    # still trusted the string a lane declared. A relative path
+    # (./tools/curl), an absolute path outside any trusted location
+    # (/tmp/curl — world-writable on most systems), or an env-wrapped PATH
+    # override (PATH=./tools) can all point "curl" at an attacker-planted
+    # binary while still passing a basename check, and none of curl, wget,
+    # nc, ncat, or grpc_health_probe has one absolute path that is the same
+    # across this project's Linux, macOS, and Windows runners — so there is
+    # no portable location to trust even for a literal, unwrapped
+    # ["curl", ...]. live_smoke.endpoint carries no executable at all and
+    # closes the whole class of bypass; command is simply not a permitted
+    # field any more, regardless of form.
+    not_permitted_message = "live_smoke.command is not a permitted field"
 
     for {label, command} <- [
-          {"echo direct", ["echo", "ok"]},
-          {"echo with no operand", ["echo"]},
-          {"echo path-qualified", ["/bin/echo", "ok"]},
-          {"echo wrapped in env", ["env", "FOO=bar", "echo", "ok"]},
-          {"echo wrapped in mise exec --", ["mise", "exec", "--", "echo", "ok"]},
-          {"echo wrapped in sh -c", ["sh", "-c", "echo"]},
-          {"printf direct", ["printf", "ok"]},
-          {"printf path-qualified", ["/usr/bin/printf", "ok"]},
-          {"printf wrapped in env", ["env", "X=1", "printf", "ok"]},
-          {"printf wrapped in mise exec --", ["mise", "exec", "--", "printf", "ok"]}
+          {"a plain, previously allow-listed probe name", ["curl", "http://localhost:4000/health"]},
+          {"a relative path", ["./tools/curl", "http://localhost:4000/health"]},
+          {"an untrusted absolute path", ["/tmp/curl", "http://localhost:4000/health"]},
+          {"a PATH override wrapped in env",
+           ["env", "PATH=./tools", "curl", "http://localhost:4000/health"]},
+          {"a relative path wrapped in mise exec --",
+           ["mise", "exec", "--", "./tools/curl", "http://localhost:4000/health"]},
+          {"an untrusted absolute path wrapped in sh -c", ["sh", "-c", "/tmp/curl"]}
         ] do
-      test "live_smoke rejects #{label} (not an allow-listed probe)" do
+      test "live_smoke rejects #{label} — command is not a permitted field" do
         envelope =
           @valid
           |> Map.put("affects_runtime", true)
@@ -856,23 +840,11 @@ defmodule LaneTaskEnvelopeTest do
             "timeout_ms" => 1000
           })
 
-        assert unquote(allowlist_message) in errors(envelope)
+        assert unquote(not_permitted_message) in errors(envelope)
       end
     end
 
-    test "live_smoke accepts an allow-listed probe binary" do
-      envelope =
-        @valid
-        |> Map.put("affects_runtime", true)
-        |> Map.put("live_smoke", %{
-          "command" => ["curl", "-fsS", "http://localhost:4000/health"],
-          "timeout_ms" => 5000
-        })
-
-      assert [] == errors(envelope)
-    end
-
-    test "declared endpoint health contract is accepted as an alternative to command" do
+    test "declared endpoint health contract is the only permitted live_smoke shape" do
       envelope =
         @valid
         |> Map.put("affects_runtime", true)
@@ -884,28 +856,13 @@ defmodule LaneTaskEnvelopeTest do
       assert [] == errors(envelope)
     end
 
-    test "live_smoke rejects declaring both command and endpoint" do
-      envelope =
-        @valid
-        |> Map.put("affects_runtime", true)
-        |> Map.put("live_smoke", %{
-          "command" => ["curl", "http://localhost:4000/health"],
-          "endpoint" => %{"url" => "http://localhost:4000/health", "expect_status" => 200},
-          "timeout_ms" => 5000
-        })
-
-      assert "live_smoke must declare exactly one of command or endpoint, not both" in errors(
-               envelope
-             )
-    end
-
-    test "live_smoke rejects declaring neither command nor endpoint" do
+    test "live_smoke.endpoint is required" do
       envelope =
         @valid
         |> Map.put("affects_runtime", true)
         |> Map.put("live_smoke", %{"timeout_ms" => 5000})
 
-      assert "live_smoke must declare either command or endpoint" in errors(envelope)
+      assert "live_smoke.endpoint is required" in errors(envelope)
     end
 
     test "live_smoke.endpoint requires a non-empty url" do
@@ -1104,6 +1061,69 @@ defmodule LaneTaskEnvelopeTest do
         @valid
         |> put_in(["agent", "mode"], "supervised")
         |> Map.update!("agent", &Map.drop(&1, ["model", "permission_mode", "startup_verification"]))
+
+      assert [] == errors(envelope)
+    end
+
+    # The Codex CLI's check_for_update_on_startup can pop an interactive
+    # global update prompt on startup, which an unattended agent can never
+    # answer. Every command that starts codex — anywhere it is validated —
+    # and the role template for an automated codex agent must disable it
+    # with -c check_for_update_on_startup=false.
+    test "a command that starts codex without the update-prompt guard is rejected" do
+      envelope =
+        Map.put(@valid, "green_commands", [
+          %{"command" => ["codex", "exec", "do-thing"], "timeout_ms" => 5000}
+        ])
+
+      assert "green_commands[0].command must include -c check_for_update_on_startup=false to avoid an interactive Codex update prompt" in errors(
+               envelope
+             )
+    end
+
+    test "a command that starts codex with the update-prompt guard is accepted" do
+      envelope =
+        Map.put(@valid, "green_commands", [
+          %{
+            "command" => [
+              "codex",
+              "exec",
+              "-c",
+              "check_for_update_on_startup=false",
+              "do-thing"
+            ],
+            "timeout_ms" => 5000
+          }
+        ])
+
+      assert [] == errors(envelope)
+    end
+
+    test "an automated codex role template requires a command" do
+      envelope = Map.put(@valid, "agent", %{"kind" => "codex", "mode" => "auto"})
+      assert "agent.command is required" in errors(envelope)
+    end
+
+    test "an automated codex role template requires the update-prompt guard" do
+      envelope =
+        Map.put(@valid, "agent", %{
+          "kind" => "codex",
+          "mode" => "auto",
+          "command" => ["codex", "app-server"]
+        })
+
+      assert "agent.command must include -c check_for_update_on_startup=false to avoid an interactive Codex update prompt" in errors(
+               envelope
+             )
+    end
+
+    test "an automated codex role template with the update-prompt guard is accepted" do
+      envelope =
+        Map.put(@valid, "agent", %{
+          "kind" => "codex",
+          "mode" => "auto",
+          "command" => ["codex", "app-server", "-c", "check_for_update_on_startup=false"]
+        })
 
       assert [] == errors(envelope)
     end

@@ -1,9 +1,17 @@
 # Command safety
 
-`red_tests`, `green_commands`, `repository_gates`, `post_integration_tests`,
-and (when present) `live_smoke` each hold command objects.
-`scripts/lane_task_envelope.exs` enforces every rule below on every command
-object in every one of those fields.
+`red_tests`, `green_commands`, `repository_gates`, and `post_integration_tests`
+each hold command objects. `scripts/lane_task_envelope.exs` enforces every
+rule below on every command object in every one of those fields.
+`agent.command` (required for an automated Codex role — see
+[envelope-fields.md](envelope-fields.md#agent-and-the-claude-auto-contract))
+is a bare argv, not a command object with `timeout_ms`, but the same argv
+rules below (the allow-list, no manual database lifecycle command, no leaf
+delegation, and the codex update-prompt guard) still apply to it.
+`live_smoke` does not hold a command at all — see
+[envelope-fields.md](envelope-fields.md#runtime-smoke-check) and
+["`live_smoke.command` does not exist"](#live_smokecommand-does-not-exist)
+below for why.
 
 ## `command` must be an argv list
 
@@ -58,8 +66,8 @@ that resolved command too. All four examples above are rejected.
 
 When the envelope's `delegation_allowed` is `false`, no command anywhere in
 the envelope (`red_tests`, `green_commands`, `repository_gates`,
-`post_integration_tests`, `live_smoke`) may invoke `herdr agent start` or
-`herdr agent prompt` — a leaf task does not spawn or instruct another agent.
+`post_integration_tests`) may invoke `herdr agent start` or `herdr agent
+prompt` — a leaf task does not spawn or instruct another agent.
 This is enforced the same way as every other rule here: by inspecting the
 declared argv command, never by anything Herdr itself enforces. See
 [envelope-fields.md](envelope-fields.md#bounded-execution-shape) for when
@@ -73,22 +81,55 @@ executable's basename the same way — `["env", "HERDR_ENV=1", "herdr",
 "start", "child"]` are all rejected exactly like the bare `["herdr", "agent",
 "start", "child"]` form.
 
-## `live_smoke.command` is a positive allow-list, not a denylist
+## Every codex startup command disables the interactive update prompt
 
-The observable-probe rule in
-[envelope-fields.md](envelope-fields.md#runtime-smoke-check) resolves through
-the same wrappers too, and checks the resolved executable's basename rather
-than the literal command array — but the check itself is an allow-list
-(`curl`, `grpc_health_probe`, `nc`, `ncat`, `wget`), not a denylist of known
-non-probes. A denylist naming `true` and unit-test runners would still let
-`echo`/`printf` through: both always succeed and print whatever text
-they're given without observing anything running, so `["echo", "ok"]`,
-`["/bin/echo", "ok"]`, `["env", "FOO=bar", "echo", "ok"]`, `["mise", "exec",
-"--", "echo", "ok"]`, and the same forms for `printf` are all rejected —
-along with `["true"]`, a unit-test runner, and every wrapped or
-path-qualified variant of either — for the same reason: none of them is on
-the allow-list, regardless of what it isn't. Use `live_smoke.endpoint`
-instead of `command` when the check is simply an HTTP status probe; see
+Any command anywhere in the envelope (`red_tests`, `green_commands`,
+`repository_gates`, `post_integration_tests`, and `agent.command` for an
+automated Codex role — see
+[envelope-fields.md](envelope-fields.md#agent-and-the-claude-auto-contract))
+whose resolved executable is `codex` must include the two adjacent argv
+tokens `-c` and `check_for_update_on_startup=false`. The local Codex CLI's
+`check_for_update_on_startup` setting can surface an interactive global
+update prompt on startup; an unattended lane or an automated Codex role can
+never answer that prompt, so it must be disabled at the point codex starts,
+not assumed away. This check resolves through the same `env`/`mise exec
+--`/shell-`-c` wrappers and path-qualified-basename handling as the
+database-lifecycle and herdr-delegation checks above, so a wrapped or
+path-qualified codex invocation cannot skip it either. A command that starts
+codex without this flag fails with "must include -c
+check_for_update_on_startup=false to avoid an interactive Codex update
+prompt".
+
+## `live_smoke.command` does not exist
+
+An earlier revision let `live_smoke` carry a `command` argv, resolved
+through the same `env`/`mise exec --`/shell-`-c` unwrap as the checks above,
+and checked against a positive allow-list of known observability binaries
+(`curl`, `grpc_health_probe`, `nc`, `ncat`, `wget`) — a genuine improvement
+over an earlier denylist, which let `echo`/`printf` straight through (both
+always succeed and print whatever text they're given without observing
+anything running).
+
+The allow-list still had a gap: it trusted the *string* a lane declared as
+the executable, not what that string would actually resolve to when
+executed. `["./tools/curl", "..."]` (a relative path resolved against
+whatever the current working directory happens to be at execution time),
+`["/tmp/curl", "..."]` (an absolute path, but to a location most systems
+leave world-writable), and `["env", "PATH=./tools", "curl", "..."]` (an
+env-wrapped `PATH` override placing an attacker-controlled directory ahead
+of the real one) can each make an allow-listed *name* resolve to a
+different, attacker-planted binary — while the argv itself stays
+perfectly well-formed and passes every rule on this page. Closing that gap
+for good means resolving the declared executable through an explicit
+trusted-path policy — never the live process `PATH`, never a bare basename
+comparison — and none of those five binaries has one absolute path that is
+the same across this project's Linux, macOS, and Windows runners, so no
+such policy can be both trustworthy and portable.
+
+`live_smoke.command` was removed rather than patched further:
+`live_smoke.endpoint` — a declared `{"url", "expect_status"}` health-check
+contract with no executable at all — has no version of this problem, and is
+now the only permitted `live_smoke` shape. See
 [envelope-fields.md](envelope-fields.md#runtime-smoke-check).
 
 ## No wait over 60000 ms

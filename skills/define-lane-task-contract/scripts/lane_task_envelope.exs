@@ -39,11 +39,7 @@ defmodule LaneTaskEnvelope do
 
   @shell_wrappers MapSet.new(~w(sh bash zsh dash ksh))
 
-  # A positive allow-list, not a denylist: live_smoke.command must resolve
-  # to one of these, or the envelope must use live_smoke.endpoint instead.
-  # A denylist of "not a probe" binaries can never be exhaustive (echo and
-  # printf always succeed and observe nothing, yet name no test runner).
-  @probe_binaries MapSet.new(~w(curl wget nc ncat grpc_health_probe))
+  @live_smoke_fields ~w(endpoint timeout_ms)
   @endpoint_fields ~w(url expect_status)
 
   @protected_action_vocabulary MapSet.new(~w(
@@ -559,53 +555,42 @@ defmodule LaneTaskEnvelope do
     end
   end
 
+  # live_smoke has exactly one shape: a declared endpoint health contract.
+  # There is deliberately no command form. An allow-list keyed on a
+  # resolved executable's basename still trusts the *string* a lane
+  # declared: a relative path (./tools/curl), an absolute path outside any
+  # trusted location (/tmp/curl), or an env-wrapped PATH override
+  # (PATH=./tools) can each point an allow-listed name at an
+  # attacker-planted binary. Closing that requires resolving the
+  # executable through an explicit trusted-path policy rather than the
+  # process PATH or a basename — and none of curl, wget, nc, ncat, or
+  # grpc_health_probe has one absolute path that is the same across this
+  # project's Linux, macOS, and Windows runners, so no such policy can be
+  # both trustworthy and portable. live_smoke.endpoint carries no
+  # executable at all and has no version of this problem.
   defp live_smoke_contract_errors(live_smoke) when is_map(live_smoke) do
-    has_command = Map.has_key?(live_smoke, "command")
-    has_endpoint = Map.has_key?(live_smoke, "endpoint")
-
-    cond do
-      has_command and has_endpoint ->
-        ["live_smoke must declare exactly one of command or endpoint, not both"]
-
-      has_command ->
-        command_object_errors_with_prefix("live_smoke", live_smoke) ++
-          live_smoke_probe_allowlist_errors(Map.get(live_smoke, "command"))
-
-      has_endpoint ->
-        live_smoke_endpoint_contract_errors(live_smoke)
-
-      true ->
-        ["live_smoke must declare either command or endpoint"]
-    end
+    []
+    |> collect(
+      for key <- Map.keys(live_smoke), key not in @live_smoke_fields do
+        "live_smoke.#{key} is not a permitted field"
+      end
+    )
+    |> collect(
+      for field <- @live_smoke_fields, not Map.has_key?(live_smoke, field) do
+        "live_smoke.#{field} is required"
+      end
+    )
+    |> collect(timeout_errors("live_smoke", Map.get(live_smoke, "timeout_ms")))
+    |> collect(
+      if Map.has_key?(live_smoke, "endpoint") do
+        endpoint_object_errors(Map.get(live_smoke, "endpoint"))
+      else
+        []
+      end
+    )
   end
 
   defp live_smoke_contract_errors(_live_smoke), do: ["live_smoke must be a JSON object"]
-
-  defp live_smoke_probe_allowlist_errors(command) when is_list(command) and command != [] do
-    case unwrap_command(command) do
-      [executable | _rest] ->
-        basename = executable |> Path.basename() |> String.downcase()
-
-        if MapSet.member?(@probe_binaries, basename) do
-          []
-        else
-          [
-            "live_smoke.command must use an allow-listed observable probe binary (#{@probe_binaries |> Enum.sort() |> Enum.join(", ")})"
-          ]
-        end
-
-      [] ->
-        []
-    end
-  end
-
-  defp live_smoke_probe_allowlist_errors(_command), do: []
-
-  defp live_smoke_endpoint_contract_errors(live_smoke) do
-    []
-    |> collect(timeout_errors("live_smoke", Map.get(live_smoke, "timeout_ms")))
-    |> collect(endpoint_object_errors(Map.get(live_smoke, "endpoint")))
-  end
 
   defp endpoint_object_errors(endpoint) when is_map(endpoint) do
     []
@@ -731,13 +716,12 @@ defmodule LaneTaskEnvelope do
     end
   end
 
-  defp command_object_errors_with_prefix(prefix, command), do: command_object_errors(prefix, command, false)
-
   defp command_object_errors(prefix, command, gated) when is_map(command) do
     []
     |> collect(argv_errors(prefix, Map.get(command, "command")))
     |> collect(timeout_errors(prefix, Map.get(command, "timeout_ms")))
     |> collect(if gated, do: cadence_errors(prefix, Map.get(command, "when")), else: [])
+    |> collect(codex_update_guard_errors(prefix, Map.get(command, "command")))
   end
 
   defp command_object_errors(prefix, _command, _gated) do
@@ -746,6 +730,40 @@ defmodule LaneTaskEnvelope do
 
   defp cadence_errors(_prefix, value) when value in @gate_cadences, do: []
   defp cadence_errors(prefix, _value), do: ["#{prefix}.when must equal \"handoff\""]
+
+  # The Codex CLI's check_for_update_on_startup can surface an interactive
+  # global update prompt on startup; an unattended agent can never answer
+  # it. Every command that starts codex — resolved the same way the
+  # database-lifecycle and herdr-delegation checks resolve their target —
+  # must carry -c check_for_update_on_startup=false.
+  defp codex_update_guard_errors(prefix, command) when is_list(command) and command != [] do
+    if starts_codex_without_update_guard?(command) do
+      [
+        "#{prefix}.command must include -c check_for_update_on_startup=false to avoid an interactive Codex update prompt"
+      ]
+    else
+      []
+    end
+  end
+
+  defp codex_update_guard_errors(_prefix, _command), do: []
+
+  defp starts_codex_without_update_guard?(command) do
+    case unwrap_command(command) do
+      [executable | rest] ->
+        executable |> Path.basename() |> String.downcase() |> then(&(&1 == "codex")) and
+          not has_update_guard_flag?(rest)
+
+      [] ->
+        false
+    end
+  end
+
+  defp has_update_guard_flag?(args) do
+    args
+    |> Enum.chunk_every(2, 1, :discard)
+    |> Enum.any?(fn [a, b] -> a == "-c" and b == "check_for_update_on_startup=false" end)
+  end
 
   defp argv_errors(prefix, command) when is_binary(command) do
     ["#{prefix}.command must be an argv list, not a shell string"]
@@ -886,28 +904,21 @@ defmodule LaneTaskEnvelope do
     end
   end
 
+  # live_smoke carries no command (see live_smoke_contract_errors/1), so
+  # only the argv-bearing fields below can carry a delegation attempt.
   defp all_command_entries(envelope) do
-    field_entries =
-      Enum.flat_map(@command_fields, fn field ->
-        case Map.get(envelope, field) do
-          list when is_list(list) ->
-            list
-            |> Enum.with_index()
-            |> Enum.filter(fn {command, _index} -> is_map(command) end)
-            |> Enum.map(fn {command, index} -> {"#{field}[#{index}]", Map.get(command, "command")} end)
+    Enum.flat_map(@command_fields, fn field ->
+      case Map.get(envelope, field) do
+        list when is_list(list) ->
+          list
+          |> Enum.with_index()
+          |> Enum.filter(fn {command, _index} -> is_map(command) end)
+          |> Enum.map(fn {command, index} -> {"#{field}[#{index}]", Map.get(command, "command")} end)
 
-          _other ->
-            []
-        end
-      end)
-
-    live_smoke_entry =
-      case Map.get(envelope, "live_smoke") do
-        %{"command" => command} -> [{"live_smoke", command}]
-        _other -> []
+        _other ->
+          []
       end
-
-    field_entries ++ live_smoke_entry
+    end)
   end
 
   defp protected_action_errors(envelope) do
@@ -1058,6 +1069,7 @@ defmodule LaneTaskEnvelope do
     |> collect(agent_string_field_errors(agent, "kind"))
     |> collect(agent_string_field_errors(agent, "mode"))
     |> collect(claude_auto_contract_errors(agent))
+    |> collect(codex_auto_contract_errors(agent))
   end
 
   defp agent_string_field_errors(agent, field) do
@@ -1076,6 +1088,21 @@ defmodule LaneTaskEnvelope do
   end
 
   defp claude_auto_contract_errors(_agent), do: []
+
+  # The role template for an automated Codex agent: its startup argv must
+  # itself carry the update-prompt guard, the same rule
+  # codex_update_guard_errors/2 applies to every other validated command.
+  defp codex_auto_contract_errors(%{"kind" => "codex", "mode" => "auto"} = agent) do
+    case Map.fetch(agent, "command") do
+      :error ->
+        ["agent.command is required"]
+
+      {:ok, command} ->
+        argv_errors("agent", command) ++ codex_update_guard_errors("agent", command)
+    end
+  end
+
+  defp codex_auto_contract_errors(_agent), do: []
 
   defp claude_model_errors(agent) do
     case Map.fetch(agent, "model") do

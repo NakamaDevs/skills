@@ -96,20 +96,29 @@ other build-time-only artifacts.
   the *running* software, not a unit-test double. A red test or green
   command proves code behaves correctly in isolation; `live_smoke` proves
   the deployed or locally running instance actually does the thing.
-  `live_smoke` must declare exactly one of:
-  - `command` (same argv shape as
-    [Test-first commands](#test-first-commands)) — its resolved executable
-    (after the same `env`/`mise exec --`/shell-`-c` unwrap as
-    [command-safety.md](command-safety.md)) must be one of a bounded
-    allow-list: `curl`, `grpc_health_probe`, `nc`, `ncat`, `wget`. This is a
-    positive allow-list, not a denylist of known non-probes — `echo` and
-    `printf` always succeed and print whatever they're told without
-    observing anything running, so a denylist naming only `true` and
-    test-runner binaries would miss them entirely.
-  - `endpoint` — a declared health-check contract instead of a command at
-    all: `{"url": "<non-empty string>", "expect_status": <100-599>}`. Use
-    this when the "probe" is simply an HTTP status check and a shelled-out
-    `curl` would just be reinventing that same check as a command.
+  `live_smoke` has exactly one shape — `endpoint` — required alongside
+  `timeout_ms`:
+  - `endpoint` — a declared health-check contract:
+    `{"url": "<non-empty string>", "expect_status": <100-599>}`.
+
+  `live_smoke.command` does not exist. An earlier revision allowed a
+  command argv, checked against a positive allow-list of known
+  observability binaries (`curl`, `grpc_health_probe`, `nc`, `ncat`,
+  `wget`) after the same wrapper unwrap used elsewhere in this contract.
+  That allow-list still trusted the *string* a lane declared as the
+  executable: a relative path (`./tools/curl`), an absolute path outside
+  any trusted location (`/tmp/curl` — world-writable on most systems), or
+  an env-wrapped `PATH` override (`PATH=./tools`) can each make an
+  allow-listed *name* resolve to an attacker-planted binary, all while the
+  argv itself stays perfectly well-formed. Closing that hole would require
+  resolving the declared executable through an explicit trusted-path
+  policy — never the process `PATH`, never a bare basename comparison —
+  and none of those five binaries has one absolute path that is the same
+  across this project's Linux, macOS, and Windows runners, so no such
+  policy can be both trustworthy and portable. `live_smoke.endpoint`
+  carries no executable at all, so it has no version of this problem;
+  every prior `live_smoke.command` use case is expected to be expressible
+  as an HTTP status check instead.
 - When `affects_runtime` is `false`, `live_smoke` must be absent.
 
 ## Feature-to-test inventory
@@ -190,3 +199,9 @@ substituted one. See [notify-parent-protocol.md](notify-parent-protocol.md).
 `agent` is an object with required `kind` and `mode` (both non-empty
 strings). When `kind` is `"claude"` and `mode` is `"auto"`, three more fields
 are required. See [claude-auto-contract.md](claude-auto-contract.md).
+
+When `kind` is `"codex"` and `mode` is `"auto"`, `agent.command` is required:
+the argv (same shape and safety rules as
+[Test-first commands](#test-first-commands)) that starts this automated
+Codex role. It must include `-c check_for_update_on_startup=false`; see
+[command-safety.md](command-safety.md#every-codex-startup-command-disables-the-interactive-update-prompt).
