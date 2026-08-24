@@ -203,5 +203,17 @@ are required. See [claude-auto-contract.md](claude-auto-contract.md).
 When `kind` is `"codex"` and `mode` is `"auto"`, `agent.command` is required:
 the argv (same shape and safety rules as
 [Test-first commands](#test-first-commands)) that starts this automated
-Codex role. It must include `-c check_for_update_on_startup=false`; see
-[command-safety.md](command-safety.md#every-codex-startup-command-disables-the-interactive-update-prompt).
+Codex role. Three rules apply to it, none a substitute for another:
+
+- It must include `-c check_for_update_on_startup=false`; see
+  [command-safety.md](command-safety.md#every-codex-startup-command-disables-the-interactive-update-prompt).
+- Its resolved executable must actually be `codex` — the update-prompt
+  flag alone does not prove that. `["herdr", "agent", "start", "child",
+  "-c", "check_for_update_on_startup=false"]` carries the flag and stays
+  argv-safe, but starts `herdr`, not `codex`, and is rejected with
+  "`agent.command` must resolve to the codex executable" regardless.
+- It is scanned by the same leaf-delegation check as every other command
+  field (`red_tests`, `green_commands`, `repository_gates`,
+  `post_integration_tests`): when `delegation_allowed` is `false`, an
+  `agent.command` that starts `herdr agent start`/`herdr agent prompt`
+  fails that check too, on top of failing the executable check above.

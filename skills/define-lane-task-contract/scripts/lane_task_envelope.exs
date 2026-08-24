@@ -904,21 +904,33 @@ defmodule LaneTaskEnvelope do
     end
   end
 
-  # live_smoke carries no command (see live_smoke_contract_errors/1), so
-  # only the argv-bearing fields below can carry a delegation attempt.
+  # live_smoke carries no command (see live_smoke_contract_errors/1).
+  # agent.command (required for an automated Codex role — see
+  # codex_auto_contract_errors/1) does carry one, and is scanned here the
+  # same as every other command field: the codex-executable requirement
+  # there is a separate control, not a substitute for this scan.
   defp all_command_entries(envelope) do
-    Enum.flat_map(@command_fields, fn field ->
-      case Map.get(envelope, field) do
-        list when is_list(list) ->
-          list
-          |> Enum.with_index()
-          |> Enum.filter(fn {command, _index} -> is_map(command) end)
-          |> Enum.map(fn {command, index} -> {"#{field}[#{index}]", Map.get(command, "command")} end)
+    field_entries =
+      Enum.flat_map(@command_fields, fn field ->
+        case Map.get(envelope, field) do
+          list when is_list(list) ->
+            list
+            |> Enum.with_index()
+            |> Enum.filter(fn {command, _index} -> is_map(command) end)
+            |> Enum.map(fn {command, index} -> {"#{field}[#{index}]", Map.get(command, "command")} end)
 
-        _other ->
-          []
+          _other ->
+            []
+        end
+      end)
+
+    agent_entry =
+      case Map.get(envelope, "agent") do
+        %{"command" => command} -> [{"agent", command}]
+        _other -> []
       end
-    end)
+
+    field_entries ++ agent_entry
   end
 
   defp protected_action_errors(envelope) do
@@ -1092,17 +1104,41 @@ defmodule LaneTaskEnvelope do
   # The role template for an automated Codex agent: its startup argv must
   # itself carry the update-prompt guard, the same rule
   # codex_update_guard_errors/2 applies to every other validated command.
+  # The guard flag alone is not enough: nothing else here proves the
+  # command actually starts codex, so codex_executable_errors/2 checks
+  # that directly, and all_command_entries/1 includes agent.command in
+  # the same leaf-delegation scan every other command field goes through
+  # (see delegation_command_errors/1) — the guard flag and the executable
+  # check are independent controls, neither a substitute for the other.
   defp codex_auto_contract_errors(%{"kind" => "codex", "mode" => "auto"} = agent) do
     case Map.fetch(agent, "command") do
       :error ->
         ["agent.command is required"]
 
       {:ok, command} ->
-        argv_errors("agent", command) ++ codex_update_guard_errors("agent", command)
+        argv_errors("agent", command) ++
+          codex_update_guard_errors("agent", command) ++
+          codex_executable_errors("agent", command)
     end
   end
 
   defp codex_auto_contract_errors(_agent), do: []
+
+  defp codex_executable_errors(prefix, command) when is_list(command) and command != [] do
+    case unwrap_command(command) do
+      [executable | _rest] ->
+        if executable |> Path.basename() |> String.downcase() |> then(&(&1 == "codex")) do
+          []
+        else
+          ["#{prefix}.command must resolve to the codex executable"]
+        end
+
+      [] ->
+        []
+    end
+  end
+
+  defp codex_executable_errors(_prefix, _command), do: []
 
   defp claude_model_errors(agent) do
     case Map.fetch(agent, "model") do

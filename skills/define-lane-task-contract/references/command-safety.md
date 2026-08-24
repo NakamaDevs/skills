@@ -7,7 +7,8 @@ rule below on every command object in every one of those fields.
 [envelope-fields.md](envelope-fields.md#agent-and-the-claude-auto-contract))
 is a bare argv, not a command object with `timeout_ms`, but the same argv
 rules below (the allow-list, no manual database lifecycle command, no leaf
-delegation, and the codex update-prompt guard) still apply to it.
+delegation, and the codex update-prompt guard) still apply to it, plus one
+rule unique to it: its resolved executable must actually be `codex`.
 `live_smoke` does not hold a command at all — see
 [envelope-fields.md](envelope-fields.md#runtime-smoke-check) and
 ["`live_smoke.command` does not exist"](#live_smokecommand-does-not-exist)
@@ -66,8 +67,16 @@ that resolved command too. All four examples above are rejected.
 
 When the envelope's `delegation_allowed` is `false`, no command anywhere in
 the envelope (`red_tests`, `green_commands`, `repository_gates`,
-`post_integration_tests`) may invoke `herdr agent start` or `herdr agent
-prompt` — a leaf task does not spawn or instruct another agent.
+`post_integration_tests`, and `agent.command` for an automated Codex role —
+see
+[envelope-fields.md](envelope-fields.md#agent-and-the-claude-auto-contract))
+may invoke `herdr agent start` or `herdr agent prompt` — a leaf task does
+not spawn or instruct another agent. `agent.command` also has to resolve
+to the codex executable (below), but that is a separate control: an
+`agent.command` that started `herdr` would fail the executable check
+regardless of `delegation_allowed`, and this scan still runs independently
+so a leaf `agent.command` cannot delegate even if some future change
+narrowed or removed the executable check.
 This is enforced the same way as every other rule here: by inspecting the
 declared argv command, never by anything Herdr itself enforces. See
 [envelope-fields.md](envelope-fields.md#bounded-execution-shape) for when
@@ -99,6 +108,22 @@ path-qualified codex invocation cannot skip it either. A command that starts
 codex without this flag fails with "must include -c
 check_for_update_on_startup=false to avoid an interactive Codex update
 prompt".
+
+For `agent.command` specifically, satisfying this flag is not sufficient by
+itself. `agent.command`'s resolved executable must also actually be
+`codex` — checked the same way (through the `env`/`mise exec --`/shell-`-c`
+unwrap, on the resolved basename) — or it fails with "`agent.command` must
+resolve to the codex executable", independent of whether the flag is
+present. `["herdr", "agent", "start", "child", "-c",
+"check_for_update_on_startup=false"]` carries the flag, stays argv-safe,
+and is still rejected: it starts `herdr`, not `codex`, and (when
+`delegation_allowed` is `false`) it is a leaf-delegation attempt on top of
+that — see [above](#no-leaf-delegation-to-another-herdr-agent). Every
+other command field in this contract already names the tool it runs
+(`mise run verify:quick`, `git`, `curl`); `agent.command` is the one field
+whose entire purpose is naming which tool it runs, so it is the one place
+this contract checks that identity directly rather than only checking
+what the declared tool is not allowed to do.
 
 ## `live_smoke.command` does not exist
 

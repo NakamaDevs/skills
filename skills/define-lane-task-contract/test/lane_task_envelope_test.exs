@@ -1127,5 +1127,69 @@ defmodule LaneTaskEnvelopeTest do
 
       assert [] == errors(envelope)
     end
+
+    # agent.command satisfying the update-prompt guard was not enough on
+    # its own: nothing required it to actually start codex, so it could
+    # start herdr (or anything else) while still carrying the flag, and it
+    # was not scanned by the leaf-delegation check that applies to every
+    # other command field.
+    for {label, command} <- [
+          {"bare", ["herdr", "agent", "start", "child", "-c", "check_for_update_on_startup=false"]},
+          {"path-qualified",
+           ["/usr/local/bin/herdr", "agent", "start", "child", "-c",
+            "check_for_update_on_startup=false"]},
+          {"wrapped in env",
+           ["env", "FOO=bar", "herdr", "agent", "start", "child", "-c",
+            "check_for_update_on_startup=false"]},
+          {"wrapped in mise exec --",
+           ["mise", "exec", "--", "herdr", "agent", "start", "child", "-c",
+            "check_for_update_on_startup=false"]}
+        ] do
+      test "an automated codex role template rejects agent.command that starts a different executable (#{label})" do
+        envelope =
+          Map.put(@valid, "agent", %{
+            "kind" => "codex",
+            "mode" => "auto",
+            "command" => unquote(command)
+          })
+
+        assert "agent.command must resolve to the codex executable" in errors(envelope)
+      end
+    end
+
+    test "an automated codex role template's agent.command is scanned by the leaf-delegation check" do
+      envelope =
+        @valid
+        |> Map.put("delegation_allowed", false)
+        |> Map.put("agent", %{
+          "kind" => "codex",
+          "mode" => "auto",
+          "command" => ["herdr", "agent", "start", "child", "-c", "check_for_update_on_startup=false"]
+        })
+
+      assert "agent.command must not start or delegate to another herdr agent when delegation_allowed is false" in errors(
+               envelope
+             )
+    end
+
+    test "an automated codex role template's agent.command permits herdr agent start when delegation_allowed is true" do
+      # This still fails the "must resolve to codex" check above — proving
+      # the delegation scan and the executable check are independent
+      # controls, neither one a substitute for the other.
+      envelope =
+        @valid
+        |> Map.put("delegation_allowed", true)
+        |> Map.put("agent", %{
+          "kind" => "codex",
+          "mode" => "auto",
+          "command" => ["herdr", "agent", "start", "child", "-c", "check_for_update_on_startup=false"]
+        })
+
+      refute "agent.command must not start or delegate to another herdr agent when delegation_allowed is false" in errors(
+               envelope
+             )
+
+      assert "agent.command must resolve to the codex executable" in errors(envelope)
+    end
   end
 end
