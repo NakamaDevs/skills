@@ -1,0 +1,4 @@
+interface:
+  display_name: "Define Lane Task Contract"
+  short_description: "Author and validate one lane task envelope"
+  default_prompt: "Use $define-lane-task-contract to author or validate one lane task envelope."

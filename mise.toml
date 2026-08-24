@@ -9,6 +9,7 @@ run_auto_install = false
 
 [tools]
 actionlint = "1.7.12"
+elixir = "1.19.5-otp-28"
 gitleaks = "8.30.0"
 prek = "0.4.11"
 python = "3.14.6"
@@ -24,6 +25,13 @@ run = ["python scripts/nakama_governance.py self-test", "python scripts/nakama_g
 
 [tasks."catalog:test"]
 run = ["python scripts/validate_catalog.py", "python -m unittest discover -s tests"]
+
+[tasks."lane-task-contract:test"]
+run = [
+  "elixir skills/define-lane-task-contract/test/lane_task_envelope_test.exs",
+  "elixir skills/define-lane-task-contract/test/lane_task_result_test.exs",
+  "elixir skills/define-lane-task-contract/test/notify_parent_test.exs",
+]
 
 [tasks."verify:quick"]
 run = ["mise run governance:test", "mise run catalog:test", "actionlint"]

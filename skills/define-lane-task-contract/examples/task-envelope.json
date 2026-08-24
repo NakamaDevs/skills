@@ -1,0 +1,77 @@
+{
+  "role": "lane",
+  "owner": "hdb",
+  "issue": "NAK-452",
+  "branch": "feat/cx/nak-452-enforceable-local-coordinator-agent",
+  "worktree": "/Users/hdb/.herdr/worktrees/skills/feat-cx-nak-452-enforceable-local-coordinator-agent",
+  "parent_task": "coordinator-nak-452-slice-1",
+  "parent_agent": "coordinator",
+  "result_path": "results/nak-452-slice-1.json",
+  "notification_state": "pending",
+  "graph_depth": 1,
+  "panes": 1,
+  "required_initial_state": {
+    "branch": "feat/cx/nak-452-enforceable-local-coordinator-agent",
+    "clean_worktree": true,
+    "base_ref": "main"
+  },
+  "inputs": [
+    "AGENTS.md",
+    "skills/bootstrap-symphony-workflow/SKILL.md"
+  ],
+  "outputs": [
+    "skills/define-lane-task-contract/SKILL.md",
+    "skills/define-lane-task-contract/scripts/notify_parent.exs"
+  ],
+  "observable_goal": "skills/define-lane-task-contract installs with a validated example envelope and a passing ExUnit suite.",
+  "red_tests": [
+    {
+      "command": ["elixir", "skills/define-lane-task-contract/test/lane_task_envelope_test.exs"],
+      "timeout_ms": 30000
+    }
+  ],
+  "green_commands": [
+    {
+      "command": ["elixir", "skills/define-lane-task-contract/test/lane_task_envelope_test.exs"],
+      "timeout_ms": 30000
+    },
+    {
+      "command": ["elixir", "skills/define-lane-task-contract/test/lane_task_result_test.exs"],
+      "timeout_ms": 30000
+    },
+    {
+      "command": ["elixir", "skills/define-lane-task-contract/test/notify_parent_test.exs"],
+      "timeout_ms": 30000
+    }
+  ],
+  "repository_gates": [
+    {
+      "command": ["mise", "run", "verify:quick"],
+      "timeout_ms": 60000
+    }
+  ],
+  "stop_conditions": [
+    "a repository gate fails",
+    "the worktree is not clean at start",
+    "the issue is closed or canceled before the observable goal is reached"
+  ],
+  "protected_actions": [
+    "merge",
+    "push",
+    "release",
+    "credential-changes"
+  ],
+  "writers": [
+    {
+      "path": "skills/define-lane-task-contract/",
+      "owner": "lane-nak-452-1"
+    }
+  ],
+  "agent": {
+    "kind": "claude",
+    "mode": "auto",
+    "model": "claude-sonnet-5",
+    "permission_mode": "auto",
+    "startup_verification": "visible"
+  }
+}
