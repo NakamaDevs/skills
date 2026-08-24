@@ -1128,6 +1128,98 @@ defmodule LaneTaskEnvelopeTest do
       assert [] == errors(envelope)
     end
 
+    test "an automated codex role template accepts a path-qualified codex executable" do
+      envelope =
+        Map.put(@valid, "agent", %{
+          "kind" => "codex",
+          "mode" => "auto",
+          "command" => ["/usr/local/bin/codex", "app-server", "-c", "check_for_update_on_startup=false"]
+        })
+
+      assert [] == errors(envelope)
+    end
+
+    test "an automated codex role template accepts an env-wrapped codex executable" do
+      envelope =
+        Map.put(@valid, "agent", %{
+          "kind" => "codex",
+          "mode" => "auto",
+          "command" => [
+            "env",
+            "CODEX_HOME=/tmp/codex",
+            "codex",
+            "app-server",
+            "-c",
+            "check_for_update_on_startup=false"
+          ]
+        })
+
+      assert [] == errors(envelope)
+    end
+
+    test "an automated codex role template accepts a mise-exec---wrapped codex executable" do
+      envelope =
+        Map.put(@valid, "agent", %{
+          "kind" => "codex",
+          "mode" => "auto",
+          "command" => [
+            "mise",
+            "exec",
+            "--",
+            "codex",
+            "app-server",
+            "-c",
+            "check_for_update_on_startup=false"
+          ]
+        })
+
+      assert [] == errors(envelope)
+    end
+
+    test "an automated codex role template resolves a shell-wrapped codex executable" do
+      # sh -c can only carry a single bare word as its script, so this form
+      # can never also carry the two-token update-prompt guard and is
+      # rejected for that separate, expected reason — but the executable
+      # check specifically must still resolve "codex" here, not treat the
+      # wrapper as if it named no executable at all.
+      envelope =
+        Map.put(@valid, "agent", %{
+          "kind" => "codex",
+          "mode" => "auto",
+          "command" => ["sh", "-c", "codex"]
+        })
+
+      refute "agent.command must resolve to the codex executable" in errors(envelope)
+    end
+
+    # unwrap_command returns [] for a wrapper with no executable at all —
+    # bare env, env with only flags, mise exec -- with nothing after it,
+    # and any supported shell wrapper's -c with no script. The executable
+    # check must fail closed on that empty resolution: agent.command that
+    # resolves to no command at all does not start codex, and must not be
+    # treated as if it did.
+    for {label, command} <- [
+          {"env", ["env"]},
+          {"env -i", ["env", "-i"]},
+          {"mise exec --", ["mise", "exec", "--"]},
+          {"sh -c", ["sh", "-c"]},
+          {"bash -c", ["bash", "-c"]},
+          {"zsh -c", ["zsh", "-c"]},
+          {"dash -c", ["dash", "-c"]},
+          {"ksh -c", ["ksh", "-c"]}
+        ] do
+      test "an automated codex role template rejects wrapper-only agent.command with no executable (#{label})" do
+        envelope =
+          Map.put(@valid, "agent", %{
+            "kind" => "codex",
+            "mode" => "auto",
+            "command" => unquote(command)
+          })
+
+        assert "agent.command must resolve to the codex executable" in errors(envelope)
+      end
+    end
+
     # agent.command satisfying the update-prompt guard was not enough on
     # its own: nothing required it to actually start codex, so it could
     # start herdr (or anything else) while still carrying the flag, and it

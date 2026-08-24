@@ -1134,7 +1134,12 @@ defmodule LaneTaskEnvelope do
         end
 
       [] ->
-        []
+        # A wrapper with no executable at all (bare env, env with only
+        # flags, mise exec -- with nothing after it, or any supported
+        # shell wrapper's -c with no script) resolves to []. That names no
+        # command, let alone codex, so this must fail closed rather than
+        # be read as "nothing to object to".
+        ["#{prefix}.command must resolve to the codex executable"]
     end
   end
 
