@@ -22,11 +22,11 @@ without a listed test is not a real rule. This is the file
 | `graph_depth` ≤ 2 | "graph_depth must be an integer from 0 through 2" |
 | `panes` 1–4 | "panes must be an integer from 1 through 4", "panes rejects zero panes" |
 | `delegation_allowed` boolean; must be `false` at `graph_depth == 2` (a leaf) | `describe "delegation_allowed and leaf commands"` |
-| An attempted `herdr agent start`/`agent prompt` delegation command is rejected in any command field when `delegation_allowed` is `false` | "rejects an attempted herdr agent start delegation...", "rejects an attempted herdr agent prompt delegation..." |
+| An attempted `herdr agent start`/`agent prompt` delegation command is rejected in any command field when `delegation_allowed` is `false`, including wrapped in `env`/`mise exec --` or path-qualified | "rejects an attempted herdr agent start delegation...", "rejects an attempted herdr agent prompt delegation...", "rejects a herdr agent start delegation wrapped in env", "rejects a herdr agent start delegation wrapped in mise exec --", "rejects a path-qualified herdr agent start delegation", "rejects a path-qualified herdr agent start delegation wrapped in mise exec --" |
 | `required_initial_state` shape and cross-checks | `describe "required_initial_state"` |
 | `integration.target/base_head/branch_lifecycle` (schema shape only — see `resolve_integration_head/1` below for the live check) | `describe "integration"` |
 | `affects_runtime` boolean, `live_smoke` conditional requirement | `describe "affects_runtime and live_smoke"` |
-| `live_smoke` rejects a trivial `["true"]` no-op and unit-test-runner binaries | "live_smoke rejects a trivial no-op probe", "live_smoke rejects a unit-test runner standing in for a live probe" |
+| `live_smoke` rejects a no-op or test-runner probe, including with operands, path-qualified, or wrapped in `env`/`mise exec --`/`sh -c` | "live_smoke rejects a trivial no-op probe", "live_smoke rejects true even with operands", "live_smoke rejects a path-qualified true", "live_smoke rejects true wrapped in env/mise exec --/sh -c", "live_smoke rejects a unit-test runner standing in for a live probe", "live_smoke rejects a path-qualified unit-test runner", "live_smoke rejects a unit-test runner wrapped in env/mise exec --" |
 | `feature_test_inventory_path` relative | "feature_test_inventory_path must be a non-empty relative path" |
 | `inputs` / `outputs` non-empty string lists | "inputs must be a non-empty list...", "outputs must be a non-empty list..." |
 | `observable_goal` non-empty, single line | "observable_goal must be a non-empty string", "observable_goal must be a single line" |
@@ -35,12 +35,13 @@ without a listed test is not a real rule. This is the file
 | `repository_gates[].when` must be `"handoff"` | `describe "repository_gates handoff cadence"` |
 | `stop_conditions` non-empty string list | "stop_conditions must be a non-empty list..." |
 | `protected_actions` vocabulary, no duplicates | `describe "protected_actions"` |
-| `writers` reject duplicate, trailing-slash-normalized, or ancestor/descendant-overlapping path ownership | `describe "writers"` |
+| `writers` paths are canonicalized relative to `worktree` (dot segments, resolvable `..`), reject an escape, and reject duplicate or ancestor/descendant-overlapping ownership | `describe "writers"` |
 | `agent.kind`/`agent.mode` required; Claude auto contract (model, permission_mode, startup_verification) | `describe "agent"` |
 | `deletion_decisions` shape | `describe "deletion_decisions"` |
 | The shipped example envelope itself validates | "accepts the shipped example envelope" |
 | The CLI requires exactly one operand; zero or surplus exits 2 | `describe "the CLI entry point (subprocess)"` |
 | `resolve_integration_head/1` (live git check, NOT part of `validate/1`) resolves `integration.target`/`integration.base_head` in the declared worktree and matches the real merge base | `describe "resolve_integration_head/1 (live git verification, not part of validate/1)"` |
+| The normal documented CLI (`elixir lane_task_envelope.exs <envelope.json>`) runs `resolve_integration_head/1` too, and rejects an unknown or stale `base_head` in a temporary repository | `describe "the CLI entry point also runs the live integration-head check (temporary repository)"` |
 | `digest/1` is a stable, content-sensitive sha256 digest of the envelope | `describe "digest"` |
 
 ## `LaneTaskResult` (`scripts/lane_task_result.exs`)

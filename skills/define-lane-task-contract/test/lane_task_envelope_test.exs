@@ -50,6 +50,112 @@ defmodule LaneTaskEnvelopeTest do
     end
   end
 
+  describe "the CLI entry point also runs the live integration-head check (temporary repository)" do
+    @envelope_script Path.join([__DIR__, "..", "scripts", "lane_task_envelope.exs"])
+
+    # git! raises with the full output on any non-zero exit, so a broken
+    # fixture fails loudly with a diagnosable message instead of a bare
+    # MatchError.
+    defp git!(dir, args) do
+      case System.cmd("git", args, cd: dir, stderr_to_stdout: true) do
+        {output, 0} -> output
+        {output, status} -> raise "git #{Enum.join(args, " ")} failed (#{status}): #{output}"
+      end
+    end
+
+    defp git_add_and_commit!(dir, file, message) do
+      git!(dir, ["add", file])
+      git!(dir, ["commit", "-q", "-m", message])
+    end
+
+    defp init_temp_repo do
+      dir =
+        Path.join(
+          System.tmp_dir!(),
+          "lane-task-contract-cli-repo-#{System.unique_integer([:positive])}"
+        )
+
+      # System.unique_integer/1 resets per BEAM VM launch, so a name built
+      # from it alone can collide with a directory a previous `elixir
+      # test.exs` invocation left behind (this test does not otherwise run
+      # inside a fixture that cleans itself up between separate process
+      # launches). rm_rf before use guarantees a fresh repo regardless;
+      # on_exit removes it again so these don't accumulate across runs.
+      File.rm_rf!(dir)
+      File.mkdir_p!(dir)
+      ExUnit.Callbacks.on_exit(fn -> File.rm_rf!(dir) end)
+
+      git!(dir, ["init", "-q"])
+      git!(dir, ["config", "user.email", "test@example.com"])
+      git!(dir, ["config", "user.name", "Test"])
+
+      File.write!(Path.join(dir, "seed.txt"), "seed\n")
+      git_add_and_commit!(dir, "seed.txt", "seed")
+
+      main_branch = dir |> git!(["branch", "--show-current"]) |> String.trim()
+      work_branch = "feat/cx/example-work"
+
+      git!(dir, ["checkout", "-q", "-b", work_branch])
+      File.write!(Path.join(dir, "work.txt"), "work\n")
+      git_add_and_commit!(dir, "work.txt", "work")
+
+      git!(dir, ["checkout", "-q", main_branch])
+      File.write!(Path.join(dir, "trunk-advance.txt"), "advance\n")
+      git_add_and_commit!(dir, "trunk-advance.txt", "trunk advances")
+      main_head_after_advance = dir |> git!(["rev-parse", main_branch]) |> String.trim()
+
+      %{
+        dir: dir,
+        main_branch: main_branch,
+        work_branch: work_branch,
+        main_head_after_advance: main_head_after_advance
+      }
+    end
+
+    defp temp_repo_envelope(repo, base_head) do
+      @valid
+      |> Map.put("worktree", repo.dir)
+      |> Map.put("branch", repo.work_branch)
+      |> put_in(["required_initial_state", "branch"], repo.work_branch)
+      |> put_in(["integration", "target"], repo.main_branch)
+      |> put_in(["integration", "base_head"], base_head)
+    end
+
+    defp write_temp_envelope(envelope) do
+      path =
+        Path.join(
+          System.tmp_dir!(),
+          "lane-task-contract-cli-envelope-#{System.unique_integer([:positive])}.json"
+        )
+
+      File.write!(path, JSON.encode!(envelope))
+      ExUnit.Callbacks.on_exit(fn -> File.rm(path) end)
+      path
+    end
+
+    test "rejects an unknown integration.base_head" do
+      repo = init_temp_repo()
+      envelope = temp_repo_envelope(repo, String.duplicate("0", 40))
+      path = write_temp_envelope(envelope)
+
+      {output, exit_code} = System.cmd("elixir", [@envelope_script, path], stderr_to_stdout: true)
+
+      assert exit_code == 1
+      assert output =~ "does not exist in the worktree"
+    end
+
+    test "rejects a stale integration.base_head that exists but is not the merge base" do
+      repo = init_temp_repo()
+      envelope = temp_repo_envelope(repo, repo.main_head_after_advance)
+      path = write_temp_envelope(envelope)
+
+      {output, exit_code} = System.cmd("elixir", [@envelope_script, path], stderr_to_stdout: true)
+
+      assert exit_code == 1
+      assert output =~ "does not match the merge base"
+    end
+  end
+
   describe "resolve_integration_head/1 (live git verification, not part of validate/1)" do
     test "accepts when integration.base_head matches the real merge base in the declared worktree" do
       assert :ok == LaneTaskEnvelope.resolve_integration_head(@valid)
@@ -285,6 +391,67 @@ defmodule LaneTaskEnvelopeTest do
         ])
 
       assert [] == errors(envelope)
+    end
+
+    test "rejects a herdr agent start delegation wrapped in env" do
+      envelope =
+        @valid
+        |> Map.put("delegation_allowed", false)
+        |> Map.put("green_commands", [
+          %{
+            "command" => ["env", "HERDR_ENV=1", "herdr", "agent", "start", "child"],
+            "timeout_ms" => 5000
+          }
+        ])
+
+      assert "green_commands[0].command must not start or delegate to another herdr agent when delegation_allowed is false" in errors(
+               envelope
+             )
+    end
+
+    test "rejects a herdr agent start delegation wrapped in mise exec --" do
+      envelope =
+        @valid
+        |> Map.put("delegation_allowed", false)
+        |> Map.put("green_commands", [
+          %{
+            "command" => ["mise", "exec", "--", "herdr", "agent", "start", "child"],
+            "timeout_ms" => 5000
+          }
+        ])
+
+      assert "green_commands[0].command must not start or delegate to another herdr agent when delegation_allowed is false" in errors(
+               envelope
+             )
+    end
+
+    test "rejects a path-qualified herdr agent start delegation" do
+      envelope =
+        @valid
+        |> Map.put("delegation_allowed", false)
+        |> Map.put("green_commands", [
+          %{"command" => ["/usr/local/bin/herdr", "agent", "start", "child"], "timeout_ms" => 5000}
+        ])
+
+      assert "green_commands[0].command must not start or delegate to another herdr agent when delegation_allowed is false" in errors(
+               envelope
+             )
+    end
+
+    test "rejects a path-qualified herdr agent start delegation wrapped in mise exec --" do
+      envelope =
+        @valid
+        |> Map.put("delegation_allowed", false)
+        |> Map.put("green_commands", [
+          %{
+            "command" => ["mise", "exec", "--", "/usr/local/bin/herdr", "agent", "prompt", "child", "go"],
+            "timeout_ms" => 5000
+          }
+        ])
+
+      assert "green_commands[0].command must not start or delegate to another herdr agent when delegation_allowed is false" in errors(
+               envelope
+             )
     end
   end
 
@@ -545,7 +712,68 @@ defmodule LaneTaskEnvelopeTest do
         |> Map.put("affects_runtime", true)
         |> Map.put("live_smoke", %{"command" => ["true"], "timeout_ms" => 1000})
 
-      assert "live_smoke.command must be an observable probe, not a no-op like [\"true\"]" in errors(
+      assert "live_smoke.command must be an observable probe, not a no-op like \"true\"" in errors(
+               envelope
+             )
+    end
+
+    test "live_smoke rejects true even with operands" do
+      envelope =
+        @valid
+        |> Map.put("affects_runtime", true)
+        |> Map.put("live_smoke", %{"command" => ["true", "--anything"], "timeout_ms" => 1000})
+
+      assert "live_smoke.command must be an observable probe, not a no-op like \"true\"" in errors(
+               envelope
+             )
+    end
+
+    test "live_smoke rejects a path-qualified true" do
+      envelope =
+        @valid
+        |> Map.put("affects_runtime", true)
+        |> Map.put("live_smoke", %{"command" => ["/usr/bin/true"], "timeout_ms" => 1000})
+
+      assert "live_smoke.command must be an observable probe, not a no-op like \"true\"" in errors(
+               envelope
+             )
+    end
+
+    test "live_smoke rejects true wrapped in env" do
+      envelope =
+        @valid
+        |> Map.put("affects_runtime", true)
+        |> Map.put("live_smoke", %{
+          "command" => ["env", "FOO=bar", "true"],
+          "timeout_ms" => 1000
+        })
+
+      assert "live_smoke.command must be an observable probe, not a no-op like \"true\"" in errors(
+               envelope
+             )
+    end
+
+    test "live_smoke rejects true wrapped in mise exec --" do
+      envelope =
+        @valid
+        |> Map.put("affects_runtime", true)
+        |> Map.put("live_smoke", %{
+          "command" => ["mise", "exec", "--", "true"],
+          "timeout_ms" => 1000
+        })
+
+      assert "live_smoke.command must be an observable probe, not a no-op like \"true\"" in errors(
+               envelope
+             )
+    end
+
+    test "live_smoke rejects true wrapped in sh -c" do
+      envelope =
+        @valid
+        |> Map.put("affects_runtime", true)
+        |> Map.put("live_smoke", %{"command" => ["sh", "-c", "true"], "timeout_ms" => 1000})
+
+      assert "live_smoke.command must be an observable probe, not a no-op like \"true\"" in errors(
                envelope
              )
     end
@@ -556,6 +784,48 @@ defmodule LaneTaskEnvelopeTest do
         |> Map.put("affects_runtime", true)
         |> Map.put("live_smoke", %{
           "command" => ["elixir", "test/lane_task_envelope_test.exs"],
+          "timeout_ms" => 5000
+        })
+
+      assert "live_smoke.command must be an observable probe, not a unit-test runner" in errors(
+               envelope
+             )
+    end
+
+    test "live_smoke rejects a path-qualified unit-test runner" do
+      envelope =
+        @valid
+        |> Map.put("affects_runtime", true)
+        |> Map.put("live_smoke", %{
+          "command" => ["/usr/local/bin/mix", "test"],
+          "timeout_ms" => 5000
+        })
+
+      assert "live_smoke.command must be an observable probe, not a unit-test runner" in errors(
+               envelope
+             )
+    end
+
+    test "live_smoke rejects a unit-test runner wrapped in env" do
+      envelope =
+        @valid
+        |> Map.put("affects_runtime", true)
+        |> Map.put("live_smoke", %{
+          "command" => ["env", "MIX_ENV=test", "mix", "test"],
+          "timeout_ms" => 5000
+        })
+
+      assert "live_smoke.command must be an observable probe, not a unit-test runner" in errors(
+               envelope
+             )
+    end
+
+    test "live_smoke rejects a unit-test runner wrapped in mise exec --" do
+      envelope =
+        @valid
+        |> Map.put("affects_runtime", true)
+        |> Map.put("live_smoke", %{
+          "command" => ["mise", "exec", "--", "elixir", "test/lane_task_envelope_test.exs"],
           "timeout_ms" => 5000
         })
 
@@ -666,6 +936,53 @@ defmodule LaneTaskEnvelopeTest do
         ])
 
       assert [] == errors(envelope)
+    end
+
+    test "canonicalizes an embedded . segment before comparing" do
+      envelope =
+        Map.put(@valid, "writers", [
+          %{"path" => "skills/./define-lane-task-contract", "owner" => "lane-a"},
+          %{"path" => "skills/define-lane-task-contract", "owner" => "lane-b"}
+        ])
+
+      assert "writers must not assign more than one owner to the same path" in errors(envelope)
+    end
+
+    test "canonicalizes a resolvable .. segment before comparing" do
+      envelope =
+        Map.put(@valid, "writers", [
+          %{"path" => "skills/other-skill/../define-lane-task-contract", "owner" => "lane-a"},
+          %{"path" => "skills/define-lane-task-contract", "owner" => "lane-b"}
+        ])
+
+      assert "writers must not assign more than one owner to the same path" in errors(envelope)
+    end
+
+    test "rejects a writer path that escapes the worktree" do
+      envelope =
+        Map.put(@valid, "writers", [
+          %{"path" => "../../etc/passwd", "owner" => "lane-a"}
+        ])
+
+      assert "writers[0].path must not escape the worktree" in errors(envelope)
+    end
+
+    test "rejects a deeply nested writer path that escapes the worktree" do
+      envelope =
+        Map.put(@valid, "writers", [
+          %{"path" => "skills/../../../../etc/passwd", "owner" => "lane-a"}
+        ])
+
+      assert "writers[0].path must not escape the worktree" in errors(envelope)
+    end
+
+    test "rejects an absolute writer path outside the worktree" do
+      envelope =
+        Map.put(@valid, "writers", [
+          %{"path" => "/etc/passwd", "owner" => "lane-a"}
+        ])
+
+      assert "writers[0].path must not escape the worktree" in errors(envelope)
     end
   end
 

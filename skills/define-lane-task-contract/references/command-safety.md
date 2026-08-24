@@ -65,6 +65,26 @@ declared argv command, never by anything Herdr itself enforces. See
 [envelope-fields.md](envelope-fields.md#bounded-execution-shape) for when
 `delegation_allowed` must be `false`.
 
+This check resolves through the same `env`/`mise exec --`/shell-`-c` wrappers
+as the database-lifecycle check above, and checks a path-qualified
+executable's basename the same way — `["env", "HERDR_ENV=1", "herdr",
+"agent", "start", "child"]`, `["mise", "exec", "--", "/usr/local/bin/herdr",
+"agent", "prompt", "child", "go"]`, and `["/usr/local/bin/herdr", "agent",
+"start", "child"]` are all rejected exactly like the bare `["herdr", "agent",
+"start", "child"]` form.
+
+## `live_smoke` rejects a disguised no-op or test runner
+
+The observable-probe rule in
+[envelope-fields.md](envelope-fields.md#runtime-smoke-check) resolves through
+the same wrappers too, and checks the resolved executable's basename rather
+than the literal command array. `["true"]`, `["true", "--anything"]`,
+`["/usr/bin/true"]`, `["env", "FOO=bar", "true"]`, `["mise", "exec", "--",
+"true"]`, and `["sh", "-c", "true"]` are all rejected as a no-op probe;
+`["elixir", ...]`, `["/usr/local/bin/mix", "test"]`, `["env", "MIX_ENV=test",
+"mix", "test"]`, and `["mise", "exec", "--", "elixir", ...]` are all rejected
+as a unit-test runner standing in for a live probe.
+
 ## No wait over 60000 ms
 
 `timeout_ms` must be an integer from `1` through `60000`. An unattended lane
@@ -98,9 +118,17 @@ Every rule above is checked by reading the declared `command` array as data.
 `LaneTaskEnvelope.validate/1` never executes anything it validates, and it
 never touches the filesystem or the network — that is what keeps it fast,
 deterministic, and safe to run against an untrusted envelope. The one
-exception in this skill is `resolve_integration_head/1`, which is a
-separate, explicitly-invoked function that does shell out to `git`; see
+exception in this skill is `resolve_integration_head/1`, which does shell
+out to `git`; see
 [envelope-fields.md](envelope-fields.md#integration-and-branch-lifecycle).
+`resolve_integration_head/1` stays a logically separate function from
+`validate/1` — but `elixir lane_task_envelope.exs <envelope.json>`, the
+normal documented CLI, runs both: it calls `resolve_integration_head/1`
+immediately after `validate/1` succeeds, so a plain CLI run proves both the
+schema and the live integration claim, not just the schema. Code that calls
+`LaneTaskEnvelope.validate/1` directly (as a library, not through the CLI)
+still gets none of the live check for free — call
+`resolve_integration_head/1` explicitly in that case.
 
 ## The CLI takes exactly the operands it documents
 

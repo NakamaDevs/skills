@@ -39,7 +39,6 @@ defmodule LaneTaskEnvelope do
 
   @shell_wrappers MapSet.new(~w(sh bash zsh dash ksh))
 
-  @trivial_probe_commands MapSet.new([["true"]])
   @non_probe_binaries MapSet.new(~w(
     elixir mix python python3 pytest npm yarn node cargo go rspec jest ruby bundle
   ))
@@ -476,27 +475,28 @@ defmodule LaneTaskEnvelope do
     end
   end
 
-  defp live_smoke_probe_errors(%{"command" => command}) when is_list(command) do
-    cond do
-      command in @trivial_probe_commands ->
-        ["live_smoke.command must be an observable probe, not a no-op like [\"true\"]"]
+  defp live_smoke_probe_errors(%{"command" => command}) when is_list(command) and command != [] do
+    case unwrap_command(command) do
+      [executable | _rest] ->
+        basename = executable |> Path.basename() |> String.downcase()
 
-      match?([_exe | _], command) and non_probe_binary?(hd(command)) ->
-        ["live_smoke.command must be an observable probe, not a unit-test runner"]
+        cond do
+          basename == "true" ->
+            ["live_smoke.command must be an observable probe, not a no-op like \"true\""]
 
-      true ->
+          MapSet.member?(@non_probe_binaries, basename) ->
+            ["live_smoke.command must be an observable probe, not a unit-test runner"]
+
+          true ->
+            []
+        end
+
+      [] ->
         []
     end
   end
 
   defp live_smoke_probe_errors(_live_smoke), do: []
-
-  defp non_probe_binary?(executable) do
-    executable
-    |> Path.basename()
-    |> String.downcase()
-    |> then(&MapSet.member?(@non_probe_binaries, &1))
-  end
 
   defp deletion_decision_errors(envelope) do
     case Map.fetch(envelope, "deletion_decisions") do
@@ -678,12 +678,16 @@ defmodule LaneTaskEnvelope do
     String.starts_with?(token, "-") or Regex.match?(~r/^[A-Za-z_][A-Za-z0-9_]*=/, token)
   end
 
-  defp herdr_delegation_command?([executable | rest]) do
-    basename = executable |> Path.basename() |> String.downcase()
-    basename == "herdr" and herdr_delegation_subcommand?(rest)
-  end
+  defp herdr_delegation_command?(command) do
+    case unwrap_command(command) do
+      [executable | rest] ->
+        executable |> Path.basename() |> String.downcase() |> then(&(&1 == "herdr")) and
+          herdr_delegation_subcommand?(rest)
 
-  defp herdr_delegation_command?([]), do: false
+      [] ->
+        false
+    end
+  end
 
   defp herdr_delegation_subcommand?(["agent", action | _rest]) when action in ["start", "prompt"],
     do: true
@@ -804,12 +808,14 @@ defmodule LaneTaskEnvelope do
   end
 
   defp writer_errors(envelope) do
+    worktree = Map.get(envelope, "worktree")
+
     case Map.fetch(envelope, "writers") do
       :error ->
         ["writers is required"]
 
       {:ok, writers} when is_list(writers) ->
-        writer_shape_errors(writers) ++ writer_duplicate_errors(writers)
+        writer_shape_errors(writers) ++ writer_path_errors(worktree, writers)
 
       {:ok, _value} ->
         ["writers must be a list of {path, owner} objects"]
@@ -837,29 +843,52 @@ defmodule LaneTaskEnvelope do
     ["writers[#{index}] must be an object with path and owner"]
   end
 
-  defp writer_duplicate_errors(writers) do
-    paths =
+  defp writer_path_errors(worktree, writers) when is_binary(worktree) do
+    resolved =
       writers
-      |> Enum.filter(&(is_map(&1) and is_binary(Map.get(&1, "path"))))
-      |> Enum.map(&normalize_writer_path(Map.get(&1, "path")))
+      |> Enum.with_index()
+      |> Enum.filter(fn {writer, _index} -> is_map(writer) and is_binary(Map.get(writer, "path")) end)
+      |> Enum.map(fn {writer, index} ->
+        {index, resolve_writer_path(worktree, Map.get(writer, "path"))}
+      end)
+
+    escape_errors =
+      for {index, {:error, :escape}} <- resolved do
+        "writers[#{index}].path must not escape the worktree"
+      end
+
+    canonical_paths = for {_index, {:ok, path}} <- resolved, do: path
 
     overlapping? =
-      paths
+      canonical_paths
       |> unique_pairs()
       |> Enum.any?(fn {a, b} -> paths_overlap?(a, b) end)
 
-    if overlapping? do
-      ["writers must not assign more than one owner to the same path"]
-    else
-      []
-    end
+    overlap_errors =
+      if overlapping? do
+        ["writers must not assign more than one owner to the same path"]
+      else
+        []
+      end
+
+    escape_errors ++ overlap_errors
   end
 
-  defp normalize_writer_path(path) do
-    path
-    |> String.replace_prefix("./", "")
-    |> String.split("/", trim: true)
-    |> Enum.join("/")
+  defp writer_path_errors(_worktree, _writers), do: []
+
+  # Resolves a writer path relative to the worktree, dropping every "."
+  # and ".." segment (Path.expand/2's normal semantics) before comparing.
+  # A path that resolves outside the worktree is rejected as an escape;
+  # anything that resolves inside it is canonicalized to a worktree-
+  # relative path for the overlap check below.
+  defp resolve_writer_path(worktree, path) do
+    expanded = Path.expand(path, worktree)
+
+    cond do
+      expanded == worktree -> {:ok, ""}
+      String.starts_with?(expanded, worktree <> "/") -> {:ok, String.trim_leading(expanded, worktree <> "/")}
+      true -> {:error, :escape}
+    end
   end
 
   defp paths_overlap?(a, b) do
@@ -946,7 +975,14 @@ unless Application.get_env(:lane_task_contract, :cli_suppressed, false) do
 
       case LaneTaskEnvelope.validate(envelope) do
         :ok ->
-          IO.puts("lane task envelope: valid (#{path})")
+          case LaneTaskEnvelope.resolve_integration_head(envelope) do
+            :ok ->
+              IO.puts("lane task envelope: valid (#{path})")
+
+            {:error, errors} ->
+              Enum.each(errors, fn error -> IO.puts(:stderr, "lane task envelope: #{error}") end)
+              System.halt(1)
+          end
 
         {:error, errors} ->
           Enum.each(errors, fn error -> IO.puts(:stderr, "lane task envelope: #{error}") end)

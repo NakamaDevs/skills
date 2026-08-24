@@ -27,7 +27,7 @@ field is required except `live_smoke`, which is required exactly when
 | `graph_depth` | integer | `0` through `2`. Counts coordinator-to-lane nesting; a lane may not spawn a sub-graph more than two levels deep. |
 | `panes` | integer | `1` through `4`. The maximum number of Herdr panes this lane task may use at once. |
 | `delegation_allowed` | boolean | Must be `false` when `graph_depth` is `2` — a task at the depth cap is a leaf and cannot delegate further without breaking that cap. When `false`, no command anywhere in the envelope (`red_tests`, `green_commands`, `repository_gates`, `post_integration_tests`, `live_smoke`) may invoke `herdr agent start` or `herdr agent prompt`; see [command-safety.md](command-safety.md#leaf-delegation). |
-| `writers` | array of `{"path", "owner"}` | Paths are normalized (trailing slashes and `./` stripped) before comparison. No two entries may resolve to the same path or to an ancestor/descendant of each other — `skills/foo` and `skills/foo/bar` overlap just as much as two entries both naming `skills/foo`. |
+| `writers` | array of `{"path", "owner"}` | Each `path` is canonicalized by resolving it (`Path.expand/2`) against `worktree`: trailing slashes, embedded `.` segments, and resolvable `..` segments are all removed the same way. A path that resolves outside `worktree` — `../../etc/passwd`, `skills/../../../../etc/passwd`, `/etc/passwd` — is rejected as an escape, not silently clamped. No two entries may resolve to the same canonical path or to an ancestor/descendant of each other — `skills/foo` and `skills/foo/bar` overlap just as much as two entries both naming `skills/foo`, and `skills/./foo` and `skills/other/../foo` are the same path as `skills/foo` for this comparison. |
 
 ## Required initial state
 
@@ -64,9 +64,13 @@ Whether `base_head` actually exists and actually equals the merge base of
 `branch` and `target` is a separate, live check:
 `LaneTaskEnvelope.resolve_integration_head/1` resolves `target` and
 `base_head` in the envelope's own declared `worktree` by shelling out to
-`git -C <worktree> cat-file -e` and `git -C <worktree> merge-base`. Run it
-before trusting `integration.base_head` for anything; a passing
-`validate/1` does not prove it.
+`git -C <worktree> cat-file -e` and `git -C <worktree> merge-base`. The
+normal documented CLI (`elixir lane_task_envelope.exs <envelope.json>`)
+already runs this check immediately after `validate/1` succeeds — an
+unknown or stale `base_head` fails that CLI run with a clear message. Code
+calling `LaneTaskEnvelope.validate/1` directly, without going through the
+CLI, gets none of this for free and must call
+`resolve_integration_head/1` itself before trusting `integration.base_head`.
 
 ## Runtime smoke check
 
