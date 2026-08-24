@@ -67,8 +67,12 @@ does not turn adaptive reasoning off.
 [claude-auto-contract.md](claude-auto-contract.md)) is an unattended
 *permission* posture — which tool calls run without a human answering. It
 is unrelated to `agent.effort: "auto"`, which is a *reasoning* setting. The
-two share a word and nothing else; both are required, and neither implies
-the other.
+two share a word and nothing else, and neither implies the other.
+`permission_mode: "auto"` is required only for automated **Claude** lanes.
+An automated **Codex** lane requires `model`, `effort`, `routing_reason`,
+and `command` under its existing contract in
+[envelope-fields.md](envelope-fields.md#agent-and-the-claude-auto-contract);
+it has no `permission_mode` field.
 
 ## Routing rules
 

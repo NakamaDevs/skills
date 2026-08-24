@@ -1314,6 +1314,15 @@ defmodule LaneTaskEnvelopeTest do
       assert "agent.effort must be one of none, low, medium, high, xhigh, max for a Codex agent" in errors(envelope)
     end
 
+    test "an automated codex role template rejects the Haiku-only sentinel not-supported" do
+      # The sentinel exists only for a Claude model with no effort control.
+      # Every Codex model supports effort, so "not-supported" on a Codex
+      # lane is a false statement and must be rejected like any other value
+      # outside the Codex set.
+      envelope = Map.put(@valid, "agent", Map.put(@codex_auto, "effort", "not-supported"))
+      assert "agent.effort must be one of none, low, medium, high, xhigh, max for a Codex agent" in errors(envelope)
+    end
+
     test "an automated codex role template rejects the Claude-only effort auto" do
       envelope = Map.put(@valid, "agent", Map.put(@codex_auto, "effort", "auto"))
       assert "agent.effort must be one of none, low, medium, high, xhigh, max for a Codex agent" in errors(envelope)
