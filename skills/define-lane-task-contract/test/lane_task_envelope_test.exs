@@ -1206,19 +1206,76 @@ defmodule LaneTaskEnvelopeTest do
 
     test "a claude auto contract requires a routing_reason" do
       envelope = Map.update!(@valid, "agent", &Map.delete(&1, "routing_reason"))
-      assert "agent.routing_reason must be a non-empty string" in errors(envelope)
+      assert "agent.routing_reason must be a non-empty string after trimming whitespace" in errors(envelope)
     end
 
     test "a claude auto contract rejects an empty routing_reason" do
       envelope = put_in(@valid, ["agent", "routing_reason"], "")
-      assert "agent.routing_reason must be a non-empty string" in errors(envelope)
+      assert "agent.routing_reason must be a non-empty string after trimming whitespace" in errors(envelope)
     end
 
-    for model <- ~w(claude-fable-5 claude-sonnet-5 claude-opus-5 claude-haiku-4-5-20251001) do
-      test "a claude auto contract accepts the current model #{model}" do
-        envelope = put_in(@valid, ["agent", "model"], unquote(model))
+    for {model, effort} <- [
+          {"claude-fable-5", "auto"},
+          {"claude-sonnet-5", "auto"},
+          {"claude-opus-5", "auto"},
+          {"claude-haiku-4-5-20251001", "not-supported"}
+        ] do
+      test "a claude auto contract accepts the current model #{model} with effort #{effort}" do
+        envelope =
+          @valid
+          |> put_in(["agent", "model"], unquote(model))
+          |> put_in(["agent", "effort"], unquote(effort))
+
         assert [] == errors(envelope)
       end
+    end
+
+    # Effort sets are model-specific. Haiku 4.5 does not support effort at
+    # all, so the only honest value for it is the explicit sentinel
+    # "not-supported"; an ordinary effort level on Haiku is a lie the
+    # runtime would silently ignore, and is rejected.
+    @haiku "claude-haiku-4-5-20251001"
+    @haiku_effort_error "agent.effort must be \"not-supported\" for claude-haiku-4-5-20251001, which does not support effort"
+
+    for effort <- ~w(auto low medium high xhigh max) do
+      test "a claude auto contract rejects ordinary effort #{effort} for Haiku" do
+        envelope =
+          @valid
+          |> put_in(["agent", "model"], @haiku)
+          |> put_in(["agent", "effort"], unquote(effort))
+
+        assert @haiku_effort_error in errors(envelope)
+      end
+    end
+
+    test "a claude auto contract requires an effort for Haiku too" do
+      envelope =
+        @valid
+        |> put_in(["agent", "model"], @haiku)
+        |> Map.update!("agent", &Map.delete(&1, "effort"))
+
+      assert @haiku_effort_error in errors(envelope)
+    end
+
+    for model <- ~w(claude-fable-5 claude-sonnet-5 claude-opus-5) do
+      test "a claude auto contract rejects the Haiku sentinel not-supported for #{model}" do
+        envelope =
+          @valid
+          |> put_in(["agent", "model"], unquote(model))
+          |> put_in(["agent", "effort"], "not-supported")
+
+        assert "agent.effort must be one of auto, low, medium, high, xhigh, max for a Claude agent" in errors(envelope)
+      end
+    end
+
+    test "a claude auto contract rejects a whitespace-only routing_reason" do
+      envelope = put_in(@valid, ["agent", "routing_reason"], " \t\n ")
+      assert "agent.routing_reason must be a non-empty string after trimming whitespace" in errors(envelope)
+    end
+
+    test "a claude auto contract accepts a routing_reason with surrounding whitespace" do
+      envelope = put_in(@valid, ["agent", "routing_reason"], "  measured rework on this task shape  ")
+      assert [] == errors(envelope)
     end
 
     @codex_auto %{
@@ -1271,7 +1328,12 @@ defmodule LaneTaskEnvelopeTest do
 
     test "an automated codex role template requires a routing_reason" do
       envelope = Map.put(@valid, "agent", Map.delete(@codex_auto, "routing_reason"))
-      assert "agent.routing_reason must be a non-empty string" in errors(envelope)
+      assert "agent.routing_reason must be a non-empty string after trimming whitespace" in errors(envelope)
+    end
+
+    test "an automated codex role template rejects a whitespace-only routing_reason" do
+      envelope = Map.put(@valid, "agent", Map.put(@codex_auto, "routing_reason", "   "))
+      assert "agent.routing_reason must be a non-empty string after trimming whitespace" in errors(envelope)
     end
 
     test "a non-auto codex agent does not require model, effort, or routing_reason" do

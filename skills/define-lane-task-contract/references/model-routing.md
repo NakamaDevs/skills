@@ -27,7 +27,7 @@ together; do not let any of them drift.
 | `claude` | `claude-fable-5` | Workspace frontier model. For routing in this workspace it is treated as **at least equal to Sol** (user policy, see above). |
 | `claude` | `claude-opus-5` | High capability below Fable 5. |
 | `claude` | `claude-sonnet-5` | Balanced default for ordinary implementation lanes. |
-| `claude` | `claude-haiku-4-5-20251001` | Efficient, high volume. |
+| `claude` | `claude-haiku-4-5-20251001` | Efficient, high volume. Does not support effort; its `agent.effort` must be the sentinel `not-supported`. |
 
 A retired or dated snapshot outside this table fails validation for either
 provider.
@@ -39,21 +39,45 @@ much reasoning* that model spends per turn. Choose them independently; a
 balanced model at high effort and a frontier model at low effort are both
 valid routes, and neither substitutes for the other.
 
-| Provider | `agent.effort` values |
+| Provider / model | `agent.effort` values |
 | --- | --- |
-| `claude` | `auto`, `low`, `medium`, `high`, `xhigh`, `max` |
-| `codex` | `none`, `low`, `medium`, `high`, `xhigh`, `max` |
+| `claude` — `claude-fable-5`, `claude-sonnet-5`, `claude-opus-5` | `auto`, `low`, `medium`, `high`, `xhigh`, `max` |
+| `claude` — `claude-haiku-4-5-20251001` | `not-supported` only |
+| `codex` — every model | `none`, `low`, `medium`, `high`, `xhigh`, `max` |
 
-`auto` exists only for Claude and lets the model choose its own effort per
-turn. `none` exists only for Codex. Each value is rejected for the other
-provider.
+Claude effort sets are model-specific. Haiku 4.5 has no effort control; the
+envelope still has to say so explicitly with the sentinel `not-supported`,
+and an ordinary level (`auto`, `low`, ..., `max`) on Haiku is rejected
+rather than silently ignored. `none` exists only for Codex. Each value is
+rejected for the other provider.
+
+### What Claude `auto` means
+
+Claude `auto` **resets effort to the model's default**. It is not a mode
+where the model chooses an effort level per turn, and it is not a promise to
+save tokens. Adaptive reasoning — the model deciding how much to think on a
+given turn — works *within* the effective effort level, whatever that level
+is (the default under `auto`, or the explicit level you set). Setting a
+higher explicit level raises the ceiling adaptive reasoning works under; it
+does not turn adaptive reasoning off.
+
+### `permission_mode` is not effort
+
+`agent.permission_mode: "auto"` (see
+[claude-auto-contract.md](claude-auto-contract.md)) is an unattended
+*permission* posture — which tool calls run without a human answering. It
+is unrelated to `agent.effort: "auto"`, which is a *reasoning* setting. The
+two share a word and nothing else; both are required, and neither implies
+the other.
 
 ## Routing rules
 
 1. **Prefer Claude `auto` when no measured evidence exists.** A new lane, or
    a lane whose task shape has not been measured before, starts as
-   `kind: "claude"` with `effort: "auto"` (the model in the example envelope
-   is `claude-sonnet-5`). Do not pre-pay for effort you cannot yet justify.
+   `kind: "claude"` on an effort-supporting model with `effort: "auto"` —
+   that is, the model's default effort (the example envelope uses
+   `claude-sonnet-5`). Do not pre-pay for effort you cannot yet justify. On
+   Haiku, the only value is `not-supported`, so this rule does not apply.
 2. **Use an explicit higher effort only for a measured quality need.** Move
    to `high`, `xhigh`, or `max` (either provider) only when a previous run of
    the same task shape recorded a quality shortfall at the lower setting —
@@ -64,7 +88,8 @@ provider.
    `claude-sonnet-5`) for ordinary implementation, and efficient
    (`gpt-5.6-luna`, `claude-haiku-4-5-20251001`) for high-volume bounded
    work.
-4. **`agent.routing_reason` states the evidence.** One non-empty sentence:
+4. **`agent.routing_reason` states the evidence.** One sentence that is
+   non-empty after trimming whitespace:
    the task shape, whether measured evidence exists, and why this model and
    effort follow from it. "no measured evidence; Claude auto default" is a
    complete and honest reason.

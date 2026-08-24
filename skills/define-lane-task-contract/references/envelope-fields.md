@@ -207,12 +207,15 @@ When `kind` is `"codex"` and `mode` is `"auto"`, four fields are required:
 - `agent.model` — one of `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`.
 - `agent.effort` — one of `none`, `low`, `medium`, `high`, `xhigh`, `max`.
   The Claude-only value `auto` is rejected.
-- `agent.routing_reason` — non-empty string stating why this model and
-  effort were chosen and what measured evidence (if any) supports it.
+- `agent.routing_reason` — string, non-empty after trimming whitespace,
+  stating why this model and effort were chosen and what measured evidence
+  (if any) supports it.
 - `agent.command` — see below.
 
 [model-routing.md](model-routing.md) is the policy behind the model and
-effort choices for both providers; model and effort are separate choices.
+effort choices for both providers; model and effort are separate choices,
+and Claude effort sets are model-specific (`claude-haiku-4-5-20251001`
+takes only the sentinel `not-supported`).
 In any `mode` other than `"auto"`, none of `model`, `effort`, or
 `routing_reason` is required for either provider.
 

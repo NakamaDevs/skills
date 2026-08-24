@@ -22,17 +22,30 @@ Opus snapshot). Update `@supported_claude_models` in
 [model-routing.md](model-routing.md) when the supported model list changes;
 do not let this reference drift from the validator.
 
-## `agent.effort` must be a Claude effort level
+## `agent.effort` must match the model's effort set
 
-`agent.effort` must be one of `auto`, `low`, `medium`, `high`, `xhigh`, or
-`max`. Model and effort are separate choices. Prefer `auto` when no measured
-evidence exists for this task shape; use an explicit higher effort only for
-a measured quality need. The Codex-only value `none` is rejected here. See
-[model-routing.md](model-routing.md).
+Effort sets are model-specific:
+
+- `claude-fable-5`, `claude-sonnet-5`, `claude-opus-5`: one of `auto`,
+  `low`, `medium`, `high`, `xhigh`, or `max`. `auto` resets effort to the
+  model's default; it does not pick a level per turn and is not a
+  token-saving promise.
+- `claude-haiku-4-5-20251001`: exactly `not-supported`. Haiku has no effort
+  control, and the envelope must say so explicitly; an ordinary level on
+  Haiku is rejected with "`agent.effort` must be \"not-supported\" for
+  claude-haiku-4-5-20251001, which does not support effort". The sentinel
+  is rejected on every other model.
+
+Model and effort are separate choices, and `agent.effort` is unrelated to
+`agent.permission_mode` below even though both can be `"auto"`. Prefer
+`auto` when no measured evidence exists for this task shape; use an explicit
+higher effort only for a measured quality need. The Codex-only value `none`
+is rejected here. See [model-routing.md](model-routing.md).
 
 ## `agent.routing_reason` must state why
 
-`agent.routing_reason` is a non-empty string that says why this model and
+`agent.routing_reason` is a string that is non-empty after trimming
+whitespace (a whitespace-only value is rejected) and says why this model and
 effort were chosen: the task shape, whether measured evidence exists, and
 what that evidence showed. It is the one place a later audit can see whether
 a route was a default or a measured decision.

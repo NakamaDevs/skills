@@ -54,8 +54,14 @@ defmodule LaneTaskEnvelope do
   # Model routing (see references/model-routing.md). Model and effort are
   # separate choices; each provider has its own effort vocabulary, so a
   # Claude-only "auto" or a Codex-only "none" is rejected on the other side.
+  # Claude effort sets are model-specific: Haiku 4.5 does not support
+  # effort at all, so its only accepted value is the explicit sentinel
+  # "not-supported" — an ordinary level there would be silently ignored by
+  # the runtime, so the contract refuses to record one.
   @supported_codex_models MapSet.new(~w(gpt-5.6-sol gpt-5.6-terra gpt-5.6-luna))
   @claude_efforts ~w(auto low medium high xhigh max)
+  @claude_effort_not_supported "not-supported"
+  @claude_models_without_effort MapSet.new(~w(claude-haiku-4-5-20251001))
   @codex_efforts ~w(none low medium high xhigh max)
 
   @command_fields ~w(red_tests green_commands repository_gates post_integration_tests)
@@ -64,6 +70,8 @@ defmodule LaneTaskEnvelope do
   def supported_claude_models, do: @supported_claude_models
   def supported_codex_models, do: @supported_codex_models
   def claude_efforts, do: @claude_efforts
+  def claude_effort_not_supported, do: @claude_effort_not_supported
+  def claude_models_without_effort, do: @claude_models_without_effort
   def codex_efforts, do: @codex_efforts
   def protected_action_vocabulary, do: @protected_action_vocabulary
 
@@ -1105,7 +1113,7 @@ defmodule LaneTaskEnvelope do
   defp claude_auto_contract_errors(%{"kind" => "claude", "mode" => "auto"} = agent) do
     []
     |> collect(claude_model_errors(agent))
-    |> collect(effort_errors(agent, "Claude", @claude_efforts))
+    |> collect(claude_effort_errors(agent))
     |> collect(routing_reason_errors(agent))
     |> collect(claude_permission_mode_errors(agent))
     |> collect(claude_startup_verification_errors(agent))
@@ -1188,6 +1196,26 @@ defmodule LaneTaskEnvelope do
     end
   end
 
+  # A model that does not support effort must say so explicitly with the
+  # sentinel; every other supported (or unknown — the model error is
+  # reported separately) Claude model uses the ordinary Claude set.
+  defp claude_effort_errors(%{"model" => model} = agent)
+       when is_binary(model) do
+    if MapSet.member?(@claude_models_without_effort, model) do
+      if Map.get(agent, "effort") == @claude_effort_not_supported do
+        []
+      else
+        [
+          "agent.effort must be \"#{@claude_effort_not_supported}\" for #{model}, which does not support effort"
+        ]
+      end
+    else
+      effort_errors(agent, "Claude", @claude_efforts)
+    end
+  end
+
+  defp claude_effort_errors(agent), do: effort_errors(agent, "Claude", @claude_efforts)
+
   defp effort_errors(agent, provider, efforts) do
     case Map.fetch(agent, "effort") do
       {:ok, effort} when is_binary(effort) ->
@@ -1206,10 +1234,20 @@ defmodule LaneTaskEnvelope do
     "agent.effort must be one of #{Enum.join(efforts, ", ")} for a #{provider} agent"
   end
 
+  # The check trims the value; validation stays pure and does not rewrite
+  # the envelope, so a whitespace-only reason is rejected rather than
+  # normalized away.
   defp routing_reason_errors(agent) do
     case Map.fetch(agent, "routing_reason") do
-      {:ok, reason} when is_binary(reason) and reason != "" -> []
-      _other -> ["agent.routing_reason must be a non-empty string"]
+      {:ok, reason} when is_binary(reason) ->
+        if String.trim(reason) == "" do
+          ["agent.routing_reason must be a non-empty string after trimming whitespace"]
+        else
+          []
+        end
+
+      _other ->
+        ["agent.routing_reason must be a non-empty string after trimming whitespace"]
     end
   end
 
