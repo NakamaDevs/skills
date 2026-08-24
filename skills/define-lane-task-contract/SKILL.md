@@ -29,9 +29,14 @@ Read [envelope-fields.md](references/envelope-fields.md) for the full field
 list, [command-safety.md](references/command-safety.md) for the argv and
 timeout rules, and
 [claude-auto-contract.md](references/claude-auto-contract.md) when
-`agent.kind` is `"claude"` and `agent.mode` is `"auto"`. When `agent.kind` is
-`"codex"` and `agent.mode` is `"auto"`, `agent.command` is required and must
-include `-c check_for_update_on_startup=false` — see
+`agent.kind` is `"claude"` and `agent.mode` is `"auto"`. Every automated
+Claude or Codex lane also names `agent.model`, `agent.effort`, and
+`agent.routing_reason`; [model-routing.md](references/model-routing.md) is
+the workspace routing policy (supported models, per-provider effort
+vocabularies, Claude `auto` as the default when no measured evidence
+exists, and the five measurements to record after each run). When
+`agent.kind` is `"codex"` and `agent.mode` is `"auto"`, `agent.command` is
+required and must include `-c check_for_update_on_startup=false` — see
 [command-safety.md](references/command-safety.md#every-codex-startup-command-disables-the-interactive-update-prompt);
 the same flag is required on any other command that starts `codex`
 anywhere in the envelope, so an unattended agent never faces an

@@ -3,7 +3,7 @@
 An envelope's `agent` field always requires non-empty `kind` and `mode`. When
 `agent.kind` is `"claude"` and `agent.mode` is `"auto"`, the lane runs
 unattended: no human watches each turn before the next one starts. Because no
-human is watching, three more fields become required. All three live under
+human is watching, five more fields become required. All five live under
 `agent` in the envelope, next to `kind` and `mode`.
 
 ## `agent.model` must be a current supported model
@@ -18,9 +18,24 @@ work:
 
 Reject an envelope naming a retired model (for example an old dated Sonnet or
 Opus snapshot). Update `@supported_claude_models` in
-[`scripts/lane_task_envelope.exs`](../scripts/lane_task_envelope.exs) when
-the supported model list changes; do not let this reference drift from the
-validator.
+[`scripts/lane_task_envelope.exs`](../scripts/lane_task_envelope.exs) and
+[model-routing.md](model-routing.md) when the supported model list changes;
+do not let this reference drift from the validator.
+
+## `agent.effort` must be a Claude effort level
+
+`agent.effort` must be one of `auto`, `low`, `medium`, `high`, `xhigh`, or
+`max`. Model and effort are separate choices. Prefer `auto` when no measured
+evidence exists for this task shape; use an explicit higher effort only for
+a measured quality need. The Codex-only value `none` is rejected here. See
+[model-routing.md](model-routing.md).
+
+## `agent.routing_reason` must state why
+
+`agent.routing_reason` is a non-empty string that says why this model and
+effort were chosen: the task shape, whether measured evidence exists, and
+what that evidence showed. It is the one place a later audit can see whether
+a route was a default or a measured decision.
 
 ## `agent.permission_mode` must be `"auto"`
 
@@ -41,6 +56,8 @@ actually started under the contract it claims.
 ## When these fields are not required
 
 A `kind: "claude"` agent running in any `mode` other than `"auto"` (for
-example a supervised or interactive mode) does not need `model`,
-`permission_mode`, or `startup_verification` at all. Those fields may be
-absent. A non-Claude `kind` is never subject to this section.
+example a supervised or interactive mode) does not need `model`, `effort`,
+`routing_reason`, `permission_mode`, or `startup_verification` at all. Those
+fields may be absent. A non-Claude `kind` is never subject to this section;
+an automated Codex role has its own model, effort, and routing_reason rules
+in [envelope-fields.md](envelope-fields.md#agent-and-the-claude-auto-contract).

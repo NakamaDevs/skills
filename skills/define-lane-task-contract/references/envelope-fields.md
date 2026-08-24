@@ -197,11 +197,26 @@ substituted one. See [notify-parent-protocol.md](notify-parent-protocol.md).
 ## Agent and the Claude auto contract
 
 `agent` is an object with required `kind` and `mode` (both non-empty
-strings). When `kind` is `"claude"` and `mode` is `"auto"`, three more fields
-are required. See [claude-auto-contract.md](claude-auto-contract.md).
+strings). When `kind` is `"claude"` and `mode` is `"auto"`, five more fields
+are required (`model`, `effort`, `routing_reason`, `permission_mode`,
+`startup_verification`). See
+[claude-auto-contract.md](claude-auto-contract.md).
 
-When `kind` is `"codex"` and `mode` is `"auto"`, `agent.command` is required:
-the argv (same shape and safety rules as
+When `kind` is `"codex"` and `mode` is `"auto"`, four fields are required:
+
+- `agent.model` — one of `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`.
+- `agent.effort` — one of `none`, `low`, `medium`, `high`, `xhigh`, `max`.
+  The Claude-only value `auto` is rejected.
+- `agent.routing_reason` — non-empty string stating why this model and
+  effort were chosen and what measured evidence (if any) supports it.
+- `agent.command` — see below.
+
+[model-routing.md](model-routing.md) is the policy behind the model and
+effort choices for both providers; model and effort are separate choices.
+In any `mode` other than `"auto"`, none of `model`, `effort`, or
+`routing_reason` is required for either provider.
+
+`agent.command` is the argv (same shape and safety rules as
 [Test-first commands](#test-first-commands)) that starts this automated
 Codex role. Three rules apply to it, none a substitute for another:
 

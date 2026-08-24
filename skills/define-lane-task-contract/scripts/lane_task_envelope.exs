@@ -51,10 +51,20 @@ defmodule LaneTaskEnvelope do
     claude-fable-5 claude-opus-5 claude-sonnet-5 claude-haiku-4-5-20251001
   ))
 
+  # Model routing (see references/model-routing.md). Model and effort are
+  # separate choices; each provider has its own effort vocabulary, so a
+  # Claude-only "auto" or a Codex-only "none" is rejected on the other side.
+  @supported_codex_models MapSet.new(~w(gpt-5.6-sol gpt-5.6-terra gpt-5.6-luna))
+  @claude_efforts ~w(auto low medium high xhigh max)
+  @codex_efforts ~w(none low medium high xhigh max)
+
   @command_fields ~w(red_tests green_commands repository_gates post_integration_tests)
   @gated_command_fields ~w(repository_gates)
 
   def supported_claude_models, do: @supported_claude_models
+  def supported_codex_models, do: @supported_codex_models
+  def claude_efforts, do: @claude_efforts
+  def codex_efforts, do: @codex_efforts
   def protected_action_vocabulary, do: @protected_action_vocabulary
 
   @doc """
@@ -1095,6 +1105,8 @@ defmodule LaneTaskEnvelope do
   defp claude_auto_contract_errors(%{"kind" => "claude", "mode" => "auto"} = agent) do
     []
     |> collect(claude_model_errors(agent))
+    |> collect(effort_errors(agent, "Claude", @claude_efforts))
+    |> collect(routing_reason_errors(agent))
     |> collect(claude_permission_mode_errors(agent))
     |> collect(claude_startup_verification_errors(agent))
   end
@@ -1120,6 +1132,9 @@ defmodule LaneTaskEnvelope do
           codex_update_guard_errors("agent", command) ++
           codex_executable_errors("agent", command)
     end
+    |> collect(codex_model_errors(agent))
+    |> collect(effort_errors(agent, "Codex", @codex_efforts))
+    |> collect(routing_reason_errors(agent))
   end
 
   defp codex_auto_contract_errors(_agent), do: []
@@ -1156,6 +1171,45 @@ defmodule LaneTaskEnvelope do
 
       _other ->
         ["agent.model must be a currently supported Claude model"]
+    end
+  end
+
+  defp codex_model_errors(agent) do
+    case Map.fetch(agent, "model") do
+      {:ok, model} when is_binary(model) ->
+        if MapSet.member?(@supported_codex_models, model) do
+          []
+        else
+          ["agent.model must be a currently supported Codex model"]
+        end
+
+      _other ->
+        ["agent.model must be a currently supported Codex model"]
+    end
+  end
+
+  defp effort_errors(agent, provider, efforts) do
+    case Map.fetch(agent, "effort") do
+      {:ok, effort} when is_binary(effort) ->
+        if effort in efforts do
+          []
+        else
+          [effort_error(provider, efforts)]
+        end
+
+      _other ->
+        [effort_error(provider, efforts)]
+    end
+  end
+
+  defp effort_error(provider, efforts) do
+    "agent.effort must be one of #{Enum.join(efforts, ", ")} for a #{provider} agent"
+  end
+
+  defp routing_reason_errors(agent) do
+    case Map.fetch(agent, "routing_reason") do
+      {:ok, reason} when is_binary(reason) and reason != "" -> []
+      _other -> ["agent.routing_reason must be a non-empty string"]
     end
   end
 

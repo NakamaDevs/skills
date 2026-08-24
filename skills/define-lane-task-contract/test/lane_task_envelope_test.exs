@@ -1176,8 +1176,106 @@ defmodule LaneTaskEnvelopeTest do
       envelope =
         @valid
         |> put_in(["agent", "mode"], "supervised")
-        |> Map.update!("agent", &Map.drop(&1, ["model", "permission_mode", "startup_verification"]))
+        |> Map.update!(
+          "agent",
+          &Map.drop(&1, ["model", "permission_mode", "startup_verification", "effort", "routing_reason"])
+        )
 
+      assert [] == errors(envelope)
+    end
+
+    # Model routing (NAK-482): model and effort are separate choices, and
+    # every automated Claude or Codex lane must say which model, which
+    # effort, and why. See references/model-routing.md.
+    test "a claude auto contract requires an effort" do
+      envelope = Map.update!(@valid, "agent", &Map.delete(&1, "effort"))
+      assert "agent.effort must be one of auto, low, medium, high, xhigh, max for a Claude agent" in errors(envelope)
+    end
+
+    test "a claude auto contract rejects the Codex-only effort none" do
+      envelope = put_in(@valid, ["agent", "effort"], "none")
+      assert "agent.effort must be one of auto, low, medium, high, xhigh, max for a Claude agent" in errors(envelope)
+    end
+
+    for effort <- ~w(auto low medium high xhigh max) do
+      test "a claude auto contract accepts effort #{effort}" do
+        envelope = put_in(@valid, ["agent", "effort"], unquote(effort))
+        assert [] == errors(envelope)
+      end
+    end
+
+    test "a claude auto contract requires a routing_reason" do
+      envelope = Map.update!(@valid, "agent", &Map.delete(&1, "routing_reason"))
+      assert "agent.routing_reason must be a non-empty string" in errors(envelope)
+    end
+
+    test "a claude auto contract rejects an empty routing_reason" do
+      envelope = put_in(@valid, ["agent", "routing_reason"], "")
+      assert "agent.routing_reason must be a non-empty string" in errors(envelope)
+    end
+
+    for model <- ~w(claude-fable-5 claude-sonnet-5 claude-opus-5 claude-haiku-4-5-20251001) do
+      test "a claude auto contract accepts the current model #{model}" do
+        envelope = put_in(@valid, ["agent", "model"], unquote(model))
+        assert [] == errors(envelope)
+      end
+    end
+
+    @codex_auto %{
+      "kind" => "codex",
+      "mode" => "auto",
+      "command" => ["codex", "app-server", "-c", "check_for_update_on_startup=false"],
+      "model" => "gpt-5.6-terra",
+      "effort" => "medium",
+      "routing_reason" => "balanced default for a bounded refactor with no measured quality need"
+    }
+
+    test "an automated codex role template with model, effort, and routing_reason is accepted" do
+      envelope = Map.put(@valid, "agent", @codex_auto)
+      assert [] == errors(envelope)
+    end
+
+    test "an automated codex role template requires a current supported model" do
+      envelope = Map.put(@valid, "agent", Map.delete(@codex_auto, "model"))
+      assert "agent.model must be a currently supported Codex model" in errors(envelope)
+    end
+
+    test "an automated codex role template rejects a Claude model" do
+      envelope = Map.put(@valid, "agent", Map.put(@codex_auto, "model", "claude-fable-5"))
+      assert "agent.model must be a currently supported Codex model" in errors(envelope)
+    end
+
+    for model <- ~w(gpt-5.6-sol gpt-5.6-terra gpt-5.6-luna) do
+      test "an automated codex role template accepts the current model #{model}" do
+        envelope = Map.put(@valid, "agent", Map.put(@codex_auto, "model", unquote(model)))
+        assert [] == errors(envelope)
+      end
+    end
+
+    test "an automated codex role template requires an effort" do
+      envelope = Map.put(@valid, "agent", Map.delete(@codex_auto, "effort"))
+      assert "agent.effort must be one of none, low, medium, high, xhigh, max for a Codex agent" in errors(envelope)
+    end
+
+    test "an automated codex role template rejects the Claude-only effort auto" do
+      envelope = Map.put(@valid, "agent", Map.put(@codex_auto, "effort", "auto"))
+      assert "agent.effort must be one of none, low, medium, high, xhigh, max for a Codex agent" in errors(envelope)
+    end
+
+    for effort <- ~w(none low medium high xhigh max) do
+      test "an automated codex role template accepts effort #{effort}" do
+        envelope = Map.put(@valid, "agent", Map.put(@codex_auto, "effort", unquote(effort)))
+        assert [] == errors(envelope)
+      end
+    end
+
+    test "an automated codex role template requires a routing_reason" do
+      envelope = Map.put(@valid, "agent", Map.delete(@codex_auto, "routing_reason"))
+      assert "agent.routing_reason must be a non-empty string" in errors(envelope)
+    end
+
+    test "a non-auto codex agent does not require model, effort, or routing_reason" do
+      envelope = Map.put(@valid, "agent", %{"kind" => "codex", "mode" => "supervised"})
       assert [] == errors(envelope)
     end
 
@@ -1238,6 +1336,9 @@ defmodule LaneTaskEnvelopeTest do
         Map.put(@valid, "agent", %{
           "kind" => "codex",
           "mode" => "auto",
+          "model" => "gpt-5.6-luna",
+          "effort" => "low",
+          "routing_reason" => "efficient high-volume fixture for a startup-command test",
           "command" => ["codex", "app-server", "-c", "check_for_update_on_startup=false"]
         })
 
@@ -1249,6 +1350,9 @@ defmodule LaneTaskEnvelopeTest do
         Map.put(@valid, "agent", %{
           "kind" => "codex",
           "mode" => "auto",
+          "model" => "gpt-5.6-luna",
+          "effort" => "low",
+          "routing_reason" => "efficient high-volume fixture for a startup-command test",
           "command" => ["/usr/local/bin/codex", "app-server", "-c", "check_for_update_on_startup=false"]
         })
 
@@ -1260,6 +1364,9 @@ defmodule LaneTaskEnvelopeTest do
         Map.put(@valid, "agent", %{
           "kind" => "codex",
           "mode" => "auto",
+          "model" => "gpt-5.6-luna",
+          "effort" => "low",
+          "routing_reason" => "efficient high-volume fixture for a startup-command test",
           "command" => [
             "env",
             "CODEX_HOME=/tmp/codex",
@@ -1278,6 +1385,9 @@ defmodule LaneTaskEnvelopeTest do
         Map.put(@valid, "agent", %{
           "kind" => "codex",
           "mode" => "auto",
+          "model" => "gpt-5.6-luna",
+          "effort" => "low",
+          "routing_reason" => "efficient high-volume fixture for a startup-command test",
           "command" => [
             "mise",
             "exec",
