@@ -98,6 +98,32 @@ it has no `permission_mode` field.
    effort follow from it. "no measured evidence; Claude auto default" is a
    complete and honest reason.
 
+## Default lane matrix
+
+The coordinator starts with this matrix. It can use another route when
+`agent.routing_reason` names measured evidence for the change.
+
+| Task shape | Codex route | Claude route |
+| --- | --- | --- |
+| Link, version, inventory, or source check | `gpt-5.6-luna`, `low` | `claude-haiku-4-5-20251001`, `not-supported` |
+| Mechanical edit with exact tests | `gpt-5.6-luna`, `medium` | `claude-sonnet-5`, `auto` |
+| Routine coordinator or implementation lane | `gpt-5.6-terra`, `medium` | `claude-sonnet-5`, `auto` |
+| Exact-head review or integration diagnosis | `gpt-5.6-terra`, `high` | `claude-fable-5`, `auto` |
+| Difficult architecture, concurrency, security, or policy work | `gpt-5.6-sol`, `high` | `claude-fable-5`, `high` |
+| Unresolved quality-critical work after a failed frontier run | `gpt-5.6-sol`, `xhigh` | `claude-fable-5`, `xhigh` |
+
+Use Codex `none` only for a proven transformation without tool judgment. Use
+`low` when a fast task still needs tools or several steps.
+
+Use Luna agents for parallel discovery. Use Terra agents for most writers and
+reviewers. Keep Sol capacity available for hard defects and architecture.
+
+For an escalation, change the model or the effort first. Do not change both at
+the same time. The next measurement then shows which change helped.
+
+Do not replace a healthy active agent only to change its route. Preserve its
+context unless measured evidence supports replacement.
+
 ## Record what the route cost
 
 After every automated lane, record these five measurements next to its
