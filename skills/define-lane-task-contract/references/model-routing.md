@@ -108,9 +108,10 @@ The coordinator starts with this matrix. It can use another route when
 | Link, version, inventory, or source check | `gpt-5.6-luna`, `low` | `claude-haiku-4-5-20251001`, `not-supported` |
 | Mechanical edit with exact tests | `gpt-5.6-luna`, `medium` | `claude-sonnet-5`, `auto` |
 | Routine coordinator or implementation lane | `gpt-5.6-terra`, `medium` | `claude-sonnet-5`, `auto` |
-| Exact-head review or integration diagnosis | `gpt-5.6-terra`, `high` | `claude-fable-5`, `auto` |
-| Difficult architecture, concurrency, security, or policy work | `gpt-5.6-sol`, `high` | `claude-fable-5`, `high` |
-| Unresolved quality-critical work after a failed frontier run | `gpt-5.6-sol`, `xhigh` | `claude-fable-5`, `xhigh` |
+| Exact-head review or integration diagnosis | `gpt-5.6-terra`, `medium` | `claude-fable-5`, `auto` |
+| Difficult architecture, concurrency, security, or policy work | `gpt-5.6-sol`, `medium` | `claude-fable-5`, `auto` |
+| Measured quality gap at medium effort | Keep the model, use `high` | Keep the model, use `high` |
+| Unresolved quality gap after a high-effort run | Keep the model, use `xhigh` | Keep the model, use `xhigh` |
 
 Use Codex `none` only for a proven transformation without tool judgment. Use
 `low` when a fast task still needs tools or several steps.
