@@ -39,9 +39,12 @@ defmodule LaneTaskEnvelope do
 
   @shell_wrappers MapSet.new(~w(sh bash zsh dash ksh))
 
-  @non_probe_binaries MapSet.new(~w(
-    elixir mix python python3 pytest npm yarn node cargo go rspec jest ruby bundle
-  ))
+  # A positive allow-list, not a denylist: live_smoke.command must resolve
+  # to one of these, or the envelope must use live_smoke.endpoint instead.
+  # A denylist of "not a probe" binaries can never be exhaustive (echo and
+  # printf always succeed and observe nothing, yet name no test runner).
+  @probe_binaries MapSet.new(~w(curl wget nc ncat grpc_health_probe))
+  @endpoint_fields ~w(url expect_status)
 
   @protected_action_vocabulary MapSet.new(~w(
     merge push force-push release deploy production-effects
@@ -115,6 +118,90 @@ defmodule LaneTaskEnvelope do
       {output, _status} ->
         {:error,
          ["could not compute the merge base of #{branch} and #{target}: #{String.trim(output)}"]}
+    end
+  end
+
+  @doc """
+  Live, symlink-aware verification that no `writers[].path` actually
+  escapes the worktree once real symlinks are followed. `validate/1`'s
+  writer check is lexical only (`Path.expand/2` on strings) and cannot see
+  the filesystem: a path that is lexically inside the worktree can still
+  point outside it through a symlink whose target the lexical check never
+  reads. This is deliberately separate from `validate/1`, the same way
+  `resolve_integration_head/1` is; the documented CLI runs all three
+  (`validate/1`, then `resolve_integration_head/1`, then this) in order,
+  but code calling `validate/1` directly gets none of this for free.
+  """
+  @spec resolve_writer_paths(map()) :: :ok | {:error, [String.t()]}
+  def resolve_writer_paths(envelope) do
+    worktree = envelope["worktree"]
+    writers = envelope["writers"]
+
+    cond do
+      not is_binary(worktree) or not File.dir?(worktree) ->
+        {:error, ["worktree does not exist: #{inspect(worktree)}"]}
+
+      not is_list(writers) ->
+        :ok
+
+      true ->
+        real_worktree = real_path_prefix(worktree)
+
+        errors =
+          writers
+          |> Enum.with_index()
+          |> Enum.filter(fn {writer, _index} ->
+            is_map(writer) and is_binary(Map.get(writer, "path"))
+          end)
+          |> Enum.flat_map(fn {writer, index} ->
+            real_writer_path_errors(real_worktree, index, Map.get(writer, "path"))
+          end)
+
+        case errors do
+          [] -> :ok
+          errors -> {:error, errors}
+        end
+    end
+  end
+
+  defp real_writer_path_errors(real_worktree, index, path) do
+    real_path = path |> Path.expand(real_worktree) |> real_path_prefix()
+
+    if real_path == real_worktree or String.starts_with?(real_path, real_worktree <> "/") do
+      []
+    else
+      ["writers[#{index}].path must not escape the worktree"]
+    end
+  end
+
+  # Resolves every symlink along path components that actually exist on
+  # disk, then lexically appends whatever remains (a path a lane has not
+  # created yet cannot have its non-existent tail's symlinks resolved).
+  # Guards against a symlink cycle with a depth cap rather than tracking
+  # visited targets, since a legitimate resolution chain here is always
+  # shallow.
+  defp real_path_prefix(path), do: resolve_real_prefix(path_segments(path), "/", 0)
+
+  defp path_segments(path), do: path |> Path.split() |> Enum.reject(&(&1 == "/"))
+
+  defp resolve_real_prefix(_segments, accumulated, depth) when depth > 40, do: accumulated
+  defp resolve_real_prefix([], accumulated, _depth), do: accumulated
+
+  defp resolve_real_prefix([segment | rest], accumulated, depth) do
+    candidate = Path.join(accumulated, segment)
+
+    case File.lstat(candidate) do
+      {:ok, %File.Stat{type: :symlink}} ->
+        target = File.read_link!(candidate)
+        resolved_target = target |> Path.expand(accumulated) |> path_segments()
+        new_accumulated = resolve_real_prefix(resolved_target, "/", depth + 1)
+        resolve_real_prefix(rest, new_accumulated, depth + 1)
+
+      {:ok, _stat} ->
+        resolve_real_prefix(rest, candidate, depth)
+
+      {:error, _reason} ->
+        Enum.reduce([segment | rest], accumulated, &Path.join(&2, &1))
     end
   end
 
@@ -462,10 +549,7 @@ defmodule LaneTaskEnvelope do
         ["live_smoke is required when affects_runtime is true"]
 
       affects_runtime == true and has_live_smoke ->
-        live_smoke = Map.get(envelope, "live_smoke")
-
-        command_object_errors_with_prefix("live_smoke", live_smoke) ++
-          live_smoke_probe_errors(live_smoke)
+        live_smoke_contract_errors(Map.get(envelope, "live_smoke"))
 
       affects_runtime != true and has_live_smoke ->
         ["live_smoke must be absent when affects_runtime is false"]
@@ -475,20 +559,39 @@ defmodule LaneTaskEnvelope do
     end
   end
 
-  defp live_smoke_probe_errors(%{"command" => command}) when is_list(command) and command != [] do
+  defp live_smoke_contract_errors(live_smoke) when is_map(live_smoke) do
+    has_command = Map.has_key?(live_smoke, "command")
+    has_endpoint = Map.has_key?(live_smoke, "endpoint")
+
+    cond do
+      has_command and has_endpoint ->
+        ["live_smoke must declare exactly one of command or endpoint, not both"]
+
+      has_command ->
+        command_object_errors_with_prefix("live_smoke", live_smoke) ++
+          live_smoke_probe_allowlist_errors(Map.get(live_smoke, "command"))
+
+      has_endpoint ->
+        live_smoke_endpoint_contract_errors(live_smoke)
+
+      true ->
+        ["live_smoke must declare either command or endpoint"]
+    end
+  end
+
+  defp live_smoke_contract_errors(_live_smoke), do: ["live_smoke must be a JSON object"]
+
+  defp live_smoke_probe_allowlist_errors(command) when is_list(command) and command != [] do
     case unwrap_command(command) do
       [executable | _rest] ->
         basename = executable |> Path.basename() |> String.downcase()
 
-        cond do
-          basename == "true" ->
-            ["live_smoke.command must be an observable probe, not a no-op like \"true\""]
-
-          MapSet.member?(@non_probe_binaries, basename) ->
-            ["live_smoke.command must be an observable probe, not a unit-test runner"]
-
-          true ->
-            []
+        if MapSet.member?(@probe_binaries, basename) do
+          []
+        else
+          [
+            "live_smoke.command must use an allow-listed observable probe binary (#{@probe_binaries |> Enum.sort() |> Enum.join(", ")})"
+          ]
         end
 
       [] ->
@@ -496,7 +599,47 @@ defmodule LaneTaskEnvelope do
     end
   end
 
-  defp live_smoke_probe_errors(_live_smoke), do: []
+  defp live_smoke_probe_allowlist_errors(_command), do: []
+
+  defp live_smoke_endpoint_contract_errors(live_smoke) do
+    []
+    |> collect(timeout_errors("live_smoke", Map.get(live_smoke, "timeout_ms")))
+    |> collect(endpoint_object_errors(Map.get(live_smoke, "endpoint")))
+  end
+
+  defp endpoint_object_errors(endpoint) when is_map(endpoint) do
+    []
+    |> collect(
+      for key <- Map.keys(endpoint), key not in @endpoint_fields do
+        "live_smoke.endpoint.#{key} is not a permitted field"
+      end
+    )
+    |> collect(
+      for field <- @endpoint_fields, not Map.has_key?(endpoint, field) do
+        "live_smoke.endpoint.#{field} is required"
+      end
+    )
+    |> collect(endpoint_url_errors(endpoint))
+    |> collect(endpoint_expect_status_errors(endpoint))
+  end
+
+  defp endpoint_object_errors(_endpoint), do: ["live_smoke.endpoint must be a JSON object"]
+
+  defp endpoint_url_errors(endpoint) do
+    case Map.fetch(endpoint, "url") do
+      {:ok, value} when is_binary(value) and value != "" -> []
+      {:ok, _value} -> ["live_smoke.endpoint.url must be a non-empty string"]
+      :error -> []
+    end
+  end
+
+  defp endpoint_expect_status_errors(endpoint) do
+    case Map.fetch(endpoint, "expect_status") do
+      {:ok, value} when is_integer(value) and value >= 100 and value <= 599 -> []
+      {:ok, _value} -> ["live_smoke.endpoint.expect_status must be an integer from 100 through 599"]
+      :error -> []
+    end
+  end
 
   defp deletion_decision_errors(envelope) do
     case Map.fetch(envelope, "deletion_decisions") do
@@ -973,17 +1116,11 @@ unless Application.get_env(:lane_task_contract, :cli_suppressed, false) do
         |> File.read!()
         |> JSON.decode!()
 
-      case LaneTaskEnvelope.validate(envelope) do
-        :ok ->
-          case LaneTaskEnvelope.resolve_integration_head(envelope) do
-            :ok ->
-              IO.puts("lane task envelope: valid (#{path})")
-
-            {:error, errors} ->
-              Enum.each(errors, fn error -> IO.puts(:stderr, "lane task envelope: #{error}") end)
-              System.halt(1)
-          end
-
+      with :ok <- LaneTaskEnvelope.validate(envelope),
+           :ok <- LaneTaskEnvelope.resolve_integration_head(envelope),
+           :ok <- LaneTaskEnvelope.resolve_writer_paths(envelope) do
+        IO.puts("lane task envelope: valid (#{path})")
+      else
         {:error, errors} ->
           Enum.each(errors, fn error -> IO.puts(:stderr, "lane task envelope: #{error}") end)
           System.halt(1)

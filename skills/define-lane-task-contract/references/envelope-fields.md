@@ -27,7 +27,21 @@ field is required except `live_smoke`, which is required exactly when
 | `graph_depth` | integer | `0` through `2`. Counts coordinator-to-lane nesting; a lane may not spawn a sub-graph more than two levels deep. |
 | `panes` | integer | `1` through `4`. The maximum number of Herdr panes this lane task may use at once. |
 | `delegation_allowed` | boolean | Must be `false` when `graph_depth` is `2` — a task at the depth cap is a leaf and cannot delegate further without breaking that cap. When `false`, no command anywhere in the envelope (`red_tests`, `green_commands`, `repository_gates`, `post_integration_tests`, `live_smoke`) may invoke `herdr agent start` or `herdr agent prompt`; see [command-safety.md](command-safety.md#leaf-delegation). |
-| `writers` | array of `{"path", "owner"}` | Each `path` is canonicalized by resolving it (`Path.expand/2`) against `worktree`: trailing slashes, embedded `.` segments, and resolvable `..` segments are all removed the same way. A path that resolves outside `worktree` — `../../etc/passwd`, `skills/../../../../etc/passwd`, `/etc/passwd` — is rejected as an escape, not silently clamped. No two entries may resolve to the same canonical path or to an ancestor/descendant of each other — `skills/foo` and `skills/foo/bar` overlap just as much as two entries both naming `skills/foo`, and `skills/./foo` and `skills/other/../foo` are the same path as `skills/foo` for this comparison. |
+| `writers` | array of `{"path", "owner"}` | Each `path` is canonicalized by resolving it (`Path.expand/2`) against `worktree`: trailing slashes, embedded `.` segments, and resolvable `..` segments are all removed the same way. A path that resolves outside `worktree` — `../../etc/passwd`, `skills/../../../../etc/passwd`, `/etc/passwd` — is rejected as an escape, not silently clamped. No two entries may resolve to the same canonical path or to an ancestor/descendant of each other — `skills/foo` and `skills/foo/bar` overlap just as much as two entries both naming `skills/foo`, and `skills/./foo` and `skills/other/../foo` are the same path as `skills/foo` for this comparison. This lexical check cannot see a symlink; see `resolve_writer_paths/1` below for the live check that can. |
+
+`LaneTaskEnvelope.resolve_writer_paths/1` is the live counterpart to the
+lexical `writers` check above, the same way `resolve_integration_head/1` is
+the live counterpart to `integration`. `Path.expand/2` is purely lexical
+string algebra — it never touches the filesystem — so a `writers[].path`
+that is lexically inside `worktree` can still point outside it through a
+symlink whose target the lexical check never reads (an in-worktree symlink
+to `/etc`, for example). `resolve_writer_paths/1` resolves every symlink
+along the path components that actually exist on disk (a component a lane
+has not created yet cannot have its symlinks resolved, so the remainder is
+still joined lexically) and rejects a path whose real target falls outside
+`worktree`. The normal documented CLI runs this immediately after
+`resolve_integration_head/1` succeeds; code calling `validate/1` directly
+gets none of this for free either.
 
 ## Required initial state
 
@@ -78,17 +92,24 @@ CLI, gets none of this for free and must call
 running instance of the software exhibits, as opposed to validators, docs, or
 other build-time-only artifacts.
 
-- When `affects_runtime` is `true`, `live_smoke` is required: a command
-  object (same shape as [Test-first commands](#test-first-commands)) that
-  observes the *running* software, not a unit test double. A red test or
-  green command proves code behaves correctly in isolation; `live_smoke`
-  proves the deployed or locally running instance actually does the thing.
-  `live_smoke.command` must also be an observable probe, not a stand-in: a
-  trivial no-op (`["true"]`) and a unit-test-runner binary (`elixir`,
-  `mix`, `python`, `pytest`, `npm`, `node`, `cargo`, `go`, `rspec`, `jest`,
-  `ruby`, `bundle`, ...) are both rejected. Use an actual probe —
-  `curl`/`wget` against a running endpoint, a health-check CLI, and the
-  like.
+- When `affects_runtime` is `true`, `live_smoke` is required, and it proves
+  the *running* software, not a unit-test double. A red test or green
+  command proves code behaves correctly in isolation; `live_smoke` proves
+  the deployed or locally running instance actually does the thing.
+  `live_smoke` must declare exactly one of:
+  - `command` (same argv shape as
+    [Test-first commands](#test-first-commands)) — its resolved executable
+    (after the same `env`/`mise exec --`/shell-`-c` unwrap as
+    [command-safety.md](command-safety.md)) must be one of a bounded
+    allow-list: `curl`, `grpc_health_probe`, `nc`, `ncat`, `wget`. This is a
+    positive allow-list, not a denylist of known non-probes — `echo` and
+    `printf` always succeed and print whatever they're told without
+    observing anything running, so a denylist naming only `true` and
+    test-runner binaries would miss them entirely.
+  - `endpoint` — a declared health-check contract instead of a command at
+    all: `{"url": "<non-empty string>", "expect_status": <100-599>}`. Use
+    this when the "probe" is simply an HTTP status check and a shelled-out
+    `curl` would just be reinventing that same check as a command.
 - When `affects_runtime` is `false`, `live_smoke` must be absent.
 
 ## Feature-to-test inventory

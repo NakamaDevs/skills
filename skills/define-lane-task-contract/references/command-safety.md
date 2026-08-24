@@ -73,17 +73,23 @@ executable's basename the same way — `["env", "HERDR_ENV=1", "herdr",
 "start", "child"]` are all rejected exactly like the bare `["herdr", "agent",
 "start", "child"]` form.
 
-## `live_smoke` rejects a disguised no-op or test runner
+## `live_smoke.command` is a positive allow-list, not a denylist
 
 The observable-probe rule in
 [envelope-fields.md](envelope-fields.md#runtime-smoke-check) resolves through
 the same wrappers too, and checks the resolved executable's basename rather
-than the literal command array. `["true"]`, `["true", "--anything"]`,
-`["/usr/bin/true"]`, `["env", "FOO=bar", "true"]`, `["mise", "exec", "--",
-"true"]`, and `["sh", "-c", "true"]` are all rejected as a no-op probe;
-`["elixir", ...]`, `["/usr/local/bin/mix", "test"]`, `["env", "MIX_ENV=test",
-"mix", "test"]`, and `["mise", "exec", "--", "elixir", ...]` are all rejected
-as a unit-test runner standing in for a live probe.
+than the literal command array — but the check itself is an allow-list
+(`curl`, `grpc_health_probe`, `nc`, `ncat`, `wget`), not a denylist of known
+non-probes. A denylist naming `true` and unit-test runners would still let
+`echo`/`printf` through: both always succeed and print whatever text
+they're given without observing anything running, so `["echo", "ok"]`,
+`["/bin/echo", "ok"]`, `["env", "FOO=bar", "echo", "ok"]`, `["mise", "exec",
+"--", "echo", "ok"]`, and the same forms for `printf` are all rejected —
+along with `["true"]`, a unit-test runner, and every wrapped or
+path-qualified variant of either — for the same reason: none of them is on
+the allow-list, regardless of what it isn't. Use `live_smoke.endpoint`
+instead of `command` when the check is simply an HTTP status probe; see
+[envelope-fields.md](envelope-fields.md#runtime-smoke-check).
 
 ## No wait over 60000 ms
 
@@ -112,23 +118,26 @@ Two more bounds apply to the envelope as a whole, not to any one command:
 
 See [envelope-fields.md](envelope-fields.md) for both.
 
-## `validate/1` never runs a command
+## `validate/1` never runs a command or touches the filesystem
 
 Every rule above is checked by reading the declared `command` array as data.
 `LaneTaskEnvelope.validate/1` never executes anything it validates, and it
 never touches the filesystem or the network — that is what keeps it fast,
-deterministic, and safe to run against an untrusted envelope. The one
-exception in this skill is `resolve_integration_head/1`, which does shell
-out to `git`; see
-[envelope-fields.md](envelope-fields.md#integration-and-branch-lifecycle).
-`resolve_integration_head/1` stays a logically separate function from
-`validate/1` — but `elixir lane_task_envelope.exs <envelope.json>`, the
-normal documented CLI, runs both: it calls `resolve_integration_head/1`
-immediately after `validate/1` succeeds, so a plain CLI run proves both the
-schema and the live integration claim, not just the schema. Code that calls
+deterministic, and safe to run against an untrusted envelope. Two functions
+in this skill are the deliberate exceptions: `resolve_integration_head/1`
+shells out to `git` (see
+[envelope-fields.md](envelope-fields.md#integration-and-branch-lifecycle)),
+and `resolve_writer_paths/1` reads symlinks on disk (see
+[envelope-fields.md](envelope-fields.md#bounded-execution-shape)). Both stay
+logically separate functions from `validate/1` — but `elixir
+lane_task_envelope.exs <envelope.json>`, the normal documented CLI, runs all
+three in order: `validate/1`, then `resolve_integration_head/1`, then
+`resolve_writer_paths/1`, each gating the next. A plain CLI run proves the
+schema, the live integration claim, and that no writer path escapes the
+worktree through a symlink — not just the schema. Code that calls
 `LaneTaskEnvelope.validate/1` directly (as a library, not through the CLI)
-still gets none of the live check for free — call
-`resolve_integration_head/1` explicitly in that case.
+gets none of the two live checks for free — call them explicitly in that
+case.
 
 ## The CLI takes exactly the operands it documents
 

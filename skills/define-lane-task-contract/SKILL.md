@@ -47,14 +47,18 @@ copy its shape rather than inventing a new one.
    ```
 
 4. Fix every reported error and re-run the validator until it prints
-   `valid`. This CLI run already checked `integration.base_head` for real:
-   it shells out to `git` in the envelope's declared `worktree`, after
-   schema validation passes, to confirm `base_head` exists and equals the
-   actual merge base of `branch` and `integration.target` — an unknown or
-   stale `base_head` fails this same command with a clear message. Calling
-   `LaneTaskEnvelope.validate/1` directly from other code, without going
-   through this CLI, does not get that check for free; call
-   `resolve_integration_head/1` explicitly in that case.
+   `valid`. This CLI run already checked two things live, not just the
+   schema: it shells out to `git` in the envelope's declared `worktree`,
+   after schema validation passes, to confirm `integration.base_head`
+   exists and equals the actual merge base of `branch` and
+   `integration.target` — an unknown or stale `base_head` fails this same
+   command with a clear message — and it then resolves every `writers[].path`
+   through any real symlink on disk to confirm none of them actually
+   escapes the worktree, which a purely lexical check (string algebra on
+   `..`/`.` segments) cannot see. Calling `LaneTaskEnvelope.validate/1`
+   directly from other code, without going through this CLI, does not get
+   either check for free; call `resolve_integration_head/1` and
+   `resolve_writer_paths/1` explicitly in that case.
 5. Run `red_tests` and confirm they fail, then implement, then run
    `green_commands` and confirm they pass. Run `repository_gates` once, at
    handoff — not after every intermediate commit. If `affects_runtime` is

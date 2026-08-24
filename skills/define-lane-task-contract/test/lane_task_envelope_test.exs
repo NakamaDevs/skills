@@ -99,6 +99,8 @@ defmodule LaneTaskEnvelopeTest do
       File.write!(Path.join(dir, "work.txt"), "work\n")
       git_add_and_commit!(dir, "work.txt", "work")
 
+      merge_base = dir |> git!(["merge-base", work_branch, main_branch]) |> String.trim()
+
       git!(dir, ["checkout", "-q", main_branch])
       File.write!(Path.join(dir, "trunk-advance.txt"), "advance\n")
       git_add_and_commit!(dir, "trunk-advance.txt", "trunk advances")
@@ -108,6 +110,7 @@ defmodule LaneTaskEnvelopeTest do
         dir: dir,
         main_branch: main_branch,
         work_branch: work_branch,
+        merge_base: merge_base,
         main_head_after_advance: main_head_after_advance
       }
     end
@@ -179,6 +182,114 @@ defmodule LaneTaskEnvelopeTest do
       envelope = Map.put(@valid, "worktree", "/nonexistent/worktree/path")
       assert {:error, [error]} = LaneTaskEnvelope.resolve_integration_head(envelope)
       assert error =~ "worktree does not exist"
+    end
+  end
+
+  describe "resolve_writer_paths/1 (live, symlink-aware filesystem check; not part of validate/1)" do
+    defp init_temp_worktree_with_symlink do
+      worktree =
+        Path.join(
+          System.tmp_dir!(),
+          "lane-task-contract-symlink-worktree-#{System.unique_integer([:positive])}"
+        )
+
+      outside =
+        Path.join(
+          System.tmp_dir!(),
+          "lane-task-contract-symlink-outside-#{System.unique_integer([:positive])}"
+        )
+
+      File.rm_rf!(worktree)
+      File.rm_rf!(outside)
+      File.mkdir_p!(worktree)
+      File.mkdir_p!(outside)
+      File.write!(Path.join(outside, "secret.txt"), "secret\n")
+      File.mkdir_p!(Path.join(worktree, "skills/example"))
+      File.ln_s!(outside, Path.join(worktree, "escape-link"))
+
+      ExUnit.Callbacks.on_exit(fn ->
+        File.rm_rf!(worktree)
+        File.rm_rf!(outside)
+      end)
+
+      %{worktree: worktree, outside: outside}
+    end
+
+    test "rejects a writer path that lexically stays inside the worktree but escapes through a symlink" do
+      ctx = init_temp_worktree_with_symlink()
+
+      envelope =
+        @valid
+        |> Map.put("worktree", ctx.worktree)
+        |> Map.put("writers", [%{"path" => "escape-link/secret.txt", "owner" => "lane-a"}])
+
+      # The pure, lexical validate/1 check cannot see the symlink and
+      # accepts this path — that gap is exactly what resolve_writer_paths/1
+      # exists to close.
+      assert :ok == LaneTaskEnvelope.validate(envelope)
+
+      assert {:error, [error]} = LaneTaskEnvelope.resolve_writer_paths(envelope)
+      assert error =~ "must not escape the worktree"
+    end
+
+    test "still accepts a normal writer path with no symlink involved" do
+      ctx = init_temp_worktree_with_symlink()
+
+      envelope =
+        @valid
+        |> Map.put("worktree", ctx.worktree)
+        |> Map.put("writers", [%{"path" => "skills/example", "owner" => "lane-a"}])
+
+      assert :ok == LaneTaskEnvelope.resolve_writer_paths(envelope)
+    end
+
+    test "still accepts a writer path with a resolvable .. segment and no symlink" do
+      ctx = init_temp_worktree_with_symlink()
+      File.mkdir_p!(Path.join(ctx.worktree, "skills/other"))
+
+      envelope =
+        @valid
+        |> Map.put("worktree", ctx.worktree)
+        |> Map.put("writers", [%{"path" => "skills/other/../example", "owner" => "lane-a"}])
+
+      assert :ok == LaneTaskEnvelope.resolve_writer_paths(envelope)
+    end
+
+    test "rejects when the declared worktree does not exist" do
+      envelope = Map.put(@valid, "worktree", "/nonexistent/worktree/path")
+      assert {:error, [error]} = LaneTaskEnvelope.resolve_writer_paths(envelope)
+      assert error =~ "worktree does not exist"
+    end
+  end
+
+  describe "the CLI entry point also runs the writer-path symlink check (temporary repository)" do
+    @envelope_script Path.join([__DIR__, "..", "scripts", "lane_task_envelope.exs"])
+
+    test "rejects a writer path that escapes the worktree through a symlink" do
+      repo = init_temp_repo()
+
+      outside =
+        Path.join(
+          System.tmp_dir!(),
+          "lane-task-contract-cli-symlink-outside-#{System.unique_integer([:positive])}"
+        )
+
+      File.rm_rf!(outside)
+      File.mkdir_p!(outside)
+      ExUnit.Callbacks.on_exit(fn -> File.rm_rf!(outside) end)
+      File.ln_s!(outside, Path.join(repo.dir, "escape-link"))
+
+      envelope =
+        repo
+        |> temp_repo_envelope(repo.merge_base)
+        |> Map.put("writers", [%{"path" => "escape-link/secret.txt", "owner" => "lane-a"}])
+
+      path = write_temp_envelope(envelope)
+
+      {output, exit_code} = System.cmd("elixir", [@envelope_script, path], stderr_to_stdout: true)
+
+      assert exit_code == 1
+      assert output =~ "must not escape the worktree"
     end
   end
 
@@ -706,134 +817,6 @@ defmodule LaneTaskEnvelopeTest do
       assert [] == errors(envelope)
     end
 
-    test "live_smoke rejects a trivial no-op probe" do
-      envelope =
-        @valid
-        |> Map.put("affects_runtime", true)
-        |> Map.put("live_smoke", %{"command" => ["true"], "timeout_ms" => 1000})
-
-      assert "live_smoke.command must be an observable probe, not a no-op like \"true\"" in errors(
-               envelope
-             )
-    end
-
-    test "live_smoke rejects true even with operands" do
-      envelope =
-        @valid
-        |> Map.put("affects_runtime", true)
-        |> Map.put("live_smoke", %{"command" => ["true", "--anything"], "timeout_ms" => 1000})
-
-      assert "live_smoke.command must be an observable probe, not a no-op like \"true\"" in errors(
-               envelope
-             )
-    end
-
-    test "live_smoke rejects a path-qualified true" do
-      envelope =
-        @valid
-        |> Map.put("affects_runtime", true)
-        |> Map.put("live_smoke", %{"command" => ["/usr/bin/true"], "timeout_ms" => 1000})
-
-      assert "live_smoke.command must be an observable probe, not a no-op like \"true\"" in errors(
-               envelope
-             )
-    end
-
-    test "live_smoke rejects true wrapped in env" do
-      envelope =
-        @valid
-        |> Map.put("affects_runtime", true)
-        |> Map.put("live_smoke", %{
-          "command" => ["env", "FOO=bar", "true"],
-          "timeout_ms" => 1000
-        })
-
-      assert "live_smoke.command must be an observable probe, not a no-op like \"true\"" in errors(
-               envelope
-             )
-    end
-
-    test "live_smoke rejects true wrapped in mise exec --" do
-      envelope =
-        @valid
-        |> Map.put("affects_runtime", true)
-        |> Map.put("live_smoke", %{
-          "command" => ["mise", "exec", "--", "true"],
-          "timeout_ms" => 1000
-        })
-
-      assert "live_smoke.command must be an observable probe, not a no-op like \"true\"" in errors(
-               envelope
-             )
-    end
-
-    test "live_smoke rejects true wrapped in sh -c" do
-      envelope =
-        @valid
-        |> Map.put("affects_runtime", true)
-        |> Map.put("live_smoke", %{"command" => ["sh", "-c", "true"], "timeout_ms" => 1000})
-
-      assert "live_smoke.command must be an observable probe, not a no-op like \"true\"" in errors(
-               envelope
-             )
-    end
-
-    test "live_smoke rejects a unit-test runner standing in for a live probe" do
-      envelope =
-        @valid
-        |> Map.put("affects_runtime", true)
-        |> Map.put("live_smoke", %{
-          "command" => ["elixir", "test/lane_task_envelope_test.exs"],
-          "timeout_ms" => 5000
-        })
-
-      assert "live_smoke.command must be an observable probe, not a unit-test runner" in errors(
-               envelope
-             )
-    end
-
-    test "live_smoke rejects a path-qualified unit-test runner" do
-      envelope =
-        @valid
-        |> Map.put("affects_runtime", true)
-        |> Map.put("live_smoke", %{
-          "command" => ["/usr/local/bin/mix", "test"],
-          "timeout_ms" => 5000
-        })
-
-      assert "live_smoke.command must be an observable probe, not a unit-test runner" in errors(
-               envelope
-             )
-    end
-
-    test "live_smoke rejects a unit-test runner wrapped in env" do
-      envelope =
-        @valid
-        |> Map.put("affects_runtime", true)
-        |> Map.put("live_smoke", %{
-          "command" => ["env", "MIX_ENV=test", "mix", "test"],
-          "timeout_ms" => 5000
-        })
-
-      assert "live_smoke.command must be an observable probe, not a unit-test runner" in errors(
-               envelope
-             )
-    end
-
-    test "live_smoke rejects a unit-test runner wrapped in mise exec --" do
-      envelope =
-        @valid
-        |> Map.put("affects_runtime", true)
-        |> Map.put("live_smoke", %{
-          "command" => ["mise", "exec", "--", "elixir", "test/lane_task_envelope_test.exs"],
-          "timeout_ms" => 5000
-        })
-
-      assert "live_smoke.command must be an observable probe, not a unit-test runner" in errors(
-               envelope
-             )
-    end
-
     test "live_smoke must be absent when affects_runtime is false" do
       envelope =
         Map.put(@valid, "live_smoke", %{
@@ -842,6 +825,113 @@ defmodule LaneTaskEnvelopeTest do
         })
 
       assert "live_smoke must be absent when affects_runtime is false" in errors(envelope)
+    end
+
+    # The probe contract is a positive allow-list: live_smoke.command must
+    # resolve to one of a small set of known observability tools, not
+    # merely avoid a denylist. echo and printf always succeed and print
+    # whatever text they're given without observing anything running —
+    # exactly the kind of command a denylist-only check would miss.
+    allowlist_message =
+      "live_smoke.command must use an allow-listed observable probe binary (curl, grpc_health_probe, nc, ncat, wget)"
+
+    for {label, command} <- [
+          {"echo direct", ["echo", "ok"]},
+          {"echo with no operand", ["echo"]},
+          {"echo path-qualified", ["/bin/echo", "ok"]},
+          {"echo wrapped in env", ["env", "FOO=bar", "echo", "ok"]},
+          {"echo wrapped in mise exec --", ["mise", "exec", "--", "echo", "ok"]},
+          {"echo wrapped in sh -c", ["sh", "-c", "echo"]},
+          {"printf direct", ["printf", "ok"]},
+          {"printf path-qualified", ["/usr/bin/printf", "ok"]},
+          {"printf wrapped in env", ["env", "X=1", "printf", "ok"]},
+          {"printf wrapped in mise exec --", ["mise", "exec", "--", "printf", "ok"]}
+        ] do
+      test "live_smoke rejects #{label} (not an allow-listed probe)" do
+        envelope =
+          @valid
+          |> Map.put("affects_runtime", true)
+          |> Map.put("live_smoke", %{
+            "command" => unquote(command),
+            "timeout_ms" => 1000
+          })
+
+        assert unquote(allowlist_message) in errors(envelope)
+      end
+    end
+
+    test "live_smoke accepts an allow-listed probe binary" do
+      envelope =
+        @valid
+        |> Map.put("affects_runtime", true)
+        |> Map.put("live_smoke", %{
+          "command" => ["curl", "-fsS", "http://localhost:4000/health"],
+          "timeout_ms" => 5000
+        })
+
+      assert [] == errors(envelope)
+    end
+
+    test "declared endpoint health contract is accepted as an alternative to command" do
+      envelope =
+        @valid
+        |> Map.put("affects_runtime", true)
+        |> Map.put("live_smoke", %{
+          "endpoint" => %{"url" => "http://localhost:4000/health", "expect_status" => 200},
+          "timeout_ms" => 5000
+        })
+
+      assert [] == errors(envelope)
+    end
+
+    test "live_smoke rejects declaring both command and endpoint" do
+      envelope =
+        @valid
+        |> Map.put("affects_runtime", true)
+        |> Map.put("live_smoke", %{
+          "command" => ["curl", "http://localhost:4000/health"],
+          "endpoint" => %{"url" => "http://localhost:4000/health", "expect_status" => 200},
+          "timeout_ms" => 5000
+        })
+
+      assert "live_smoke must declare exactly one of command or endpoint, not both" in errors(
+               envelope
+             )
+    end
+
+    test "live_smoke rejects declaring neither command nor endpoint" do
+      envelope =
+        @valid
+        |> Map.put("affects_runtime", true)
+        |> Map.put("live_smoke", %{"timeout_ms" => 5000})
+
+      assert "live_smoke must declare either command or endpoint" in errors(envelope)
+    end
+
+    test "live_smoke.endpoint requires a non-empty url" do
+      envelope =
+        @valid
+        |> Map.put("affects_runtime", true)
+        |> Map.put("live_smoke", %{
+          "endpoint" => %{"url" => "", "expect_status" => 200},
+          "timeout_ms" => 5000
+        })
+
+      assert "live_smoke.endpoint.url must be a non-empty string" in errors(envelope)
+    end
+
+    test "live_smoke.endpoint requires expect_status to be a valid HTTP status integer" do
+      envelope =
+        @valid
+        |> Map.put("affects_runtime", true)
+        |> Map.put("live_smoke", %{
+          "endpoint" => %{"url" => "http://localhost:4000/health", "expect_status" => 999},
+          "timeout_ms" => 5000
+        })
+
+      assert "live_smoke.endpoint.expect_status must be an integer from 100 through 599" in errors(
+               envelope
+             )
     end
   end
 
