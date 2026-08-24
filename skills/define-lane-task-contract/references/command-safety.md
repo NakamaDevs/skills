@@ -1,8 +1,9 @@
 # Command safety
 
-`red_tests`, `green_commands`, and `repository_gates` each hold command
-objects. `scripts/lane_task_envelope.exs` enforces every rule below on every
-command object in every one of those three fields.
+`red_tests`, `green_commands`, `repository_gates`, `post_integration_tests`,
+and (when present) `live_smoke` each hold command objects.
+`scripts/lane_task_envelope.exs` enforces every rule below on every command
+object in every one of those fields.
 
 ## `command` must be an argv list
 
@@ -42,6 +43,16 @@ unattended lane.
 task must never block indefinitely; every command carries its own bound, and
 that bound cannot exceed one minute. A missing or out-of-range `timeout_ms`
 fails validation.
+
+## `repository_gates` run once, at handoff
+
+Every `repository_gates` entry additionally requires `"when": "handoff"`.
+`red_tests` and `green_commands` are the tight per-change TDD loop and run as
+often as that loop turns; a repository-wide gate such as `mise run
+verify:quick` is comparatively expensive and is required only once, at
+handoff, not re-run on every intermediate commit. `post_integration_tests`
+carries no `when` field: it runs, by name, after trunk integration, never
+before.
 
 ## Related bounds outside `command`
 

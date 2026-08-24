@@ -2,7 +2,9 @@
 
 A lane task envelope is one JSON object. `scripts/lane_task_envelope.exs`
 rejects any field not listed here and rejects a missing required field. Every
-field is required; none is optional.
+field is required except `live_smoke`, which is required exactly when
+`affects_runtime` is `true` and forbidden otherwise (see
+[Runtime smoke check](#runtime-smoke-check)).
 
 ## Identity and delegation
 
@@ -36,6 +38,46 @@ field is required; none is optional.
 
 A lane must confirm this state before doing any work, not assume it.
 
+## Integration and branch lifecycle
+
+`integration` is an object with exactly three fields:
+
+- `target` (string) — non-empty; the branch this work integrates into (for
+  example `"main"`).
+- `base_head` (string) — a full 40-character lowercase commit sha; the exact
+  commit the branch was based on (its fork point from `target`).
+- `branch_lifecycle` (string) — must equal `"short-lived"`. A lane branch is
+  merged or discarded quickly; it does not become a long-lived parallel
+  trunk.
+
+Before drafting the next envelope for the same issue, confirm
+`required_initial_state.base_ref` and `integration.base_head` reflect the
+current head of `integration.target`, not a head that predates an earlier
+integration. Next work starts from updated trunk, not from a branch that
+forked before the last merge.
+
+## Runtime smoke check
+
+`affects_runtime` (boolean) declares whether this task changes behavior a
+running instance of the software exhibits, as opposed to validators, docs, or
+other build-time-only artifacts.
+
+- When `affects_runtime` is `true`, `live_smoke` is required: a command
+  object (same shape as [Test-first commands](#test-first-commands)) that
+  observes the *running* software, not a unit test double. A red test or
+  green command proves code behaves correctly in isolation; `live_smoke`
+  proves the deployed or locally running instance actually does the thing.
+- When `affects_runtime` is `false`, `live_smoke` must be absent.
+
+## Feature-to-test inventory
+
+`feature_test_inventory_path` — a non-empty relative path (no leading `/`, no
+`..` segment) to the durable document mapping this contract's enforceable
+features to the tests that cover them. See
+[`references/feature-test-inventory.md`](feature-test-inventory.md) for the
+inventory this skill maintains about itself, and keep any inventory this
+field points to current in the same change that adds or removes a rule.
+
 ## Inputs, outputs, and goal
 
 - `inputs` — non-empty array of non-empty strings (files, docs, or prior
@@ -48,8 +90,8 @@ A lane must confirm this state before doing any work, not assume it.
 
 ## Test-first commands
 
-`red_tests`, `green_commands`, and `repository_gates` are each a non-empty
-array of command objects:
+`red_tests`, `green_commands`, `repository_gates`, and
+`post_integration_tests` are each a non-empty array of command objects:
 
 ```json
 {"command": ["elixir", "test/lane_task_envelope_test.exs"], "timeout_ms": 30000}
@@ -58,16 +100,31 @@ array of command objects:
 - `red_tests` — the commands that must fail before implementation exists.
 - `green_commands` — the commands that must pass after implementation.
 - `repository_gates` — the repository-wide checks the lane must also pass
-  (for example `mise run verify:quick`).
+  (for example `mise run verify:quick`). Each entry additionally requires
+  `"when": "handoff"`: a repository gate runs once, at handoff, not on every
+  intermediate commit.
+- `post_integration_tests` — the integration tests affected by this change
+  that must be run again *after* the branch integrates into
+  `integration.target`, against the resulting trunk.
 
 See [command-safety.md](command-safety.md) for the rules `command` and
 `timeout_ms` must satisfy.
+
+## Deletions
+
+`deletion_decisions` — an array, possibly empty, of `{"target",
+"replacement_decision"}` objects. Behavior or a test may be deleted, but
+never silently: every deletion this task makes needs an entry naming what
+was deleted (`target`) and the explicit decision covering what replaces it
+(`replacement_decision`). An empty array asserts the task deletes nothing.
 
 ## Stop conditions and protected actions
 
 - `stop_conditions` — non-empty array of non-empty strings. Each names a
   condition under which the lane must stop and hand control back rather than
-  continue.
+  continue. When the requested scope is unknown or ambiguous, that is a stop
+  condition, not a judgment call: the lane asks the parent agent before
+  editing.
 - `protected_actions` — non-empty array, no duplicates, drawn only from:
   `credential-changes`, `deploy`, `force-push`, `merge`,
   `production-effects`, `public-ingress`, `push`, `release`. These mirror the

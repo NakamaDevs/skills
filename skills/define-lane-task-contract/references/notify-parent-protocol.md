@@ -28,22 +28,28 @@ one prompt.
   "issue": "NAK-452",
   "branch": "feat/cx/nak-452-enforceable-local-coordinator-agent",
   "role": "lane",
-  "parent_task": "coordinator-nak-452-slice-1",
+  "parent_task": "kantoku-m0-proven-loop",
   "status": "green",
   "commit": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
-  "result_path": "results/nak-452-slice-1.json"
+  "result_path": "results/nak-452-slice-2.json"
 }
 ```
 
-No other field is ever added, and none of these eight is free text: `issue`,
-`branch`, `role`, and `parent_task` come from the already-validated task;
-`status`, `commit`, and `result_path` come from the already-validated
-result. The result's `evidence` field is deliberately left out. `evidence` is
-where a lane records what it observed, in its own words, and a coordinator
-running unattended (see [claude-auto-contract.md](claude-auto-contract.md))
-must not have arbitrary lane-authored text fed into its next prompt — that
-text is exactly where a prompt injection would hide. A coordinator that wants
-the evidence reads `result_path` itself, as a file, on its own terms.
+`type` is `"lane_task_result"` unless `status` is `"blocked"`, in which case
+it is `"lane_task_blocked"` — the parent gets a direct, bounded result event
+or a direct, bounded blocker event, distinguished by `type` without changing
+the field set. No other field is ever added, and none of these eight is free
+text: `issue`, `branch`, `role`, and `parent_task` come from the
+already-validated task; `status`, `commit`, and `result_path` come from the
+already-validated result. The result's `red_evidence` and `green_evidence`
+fields are deliberately left out. Those are where a lane records what it
+observed, in its own words, and a coordinator running unattended (see
+[claude-auto-contract.md](claude-auto-contract.md)) must not have arbitrary
+lane-authored text fed into its next prompt — that text is exactly where a
+prompt injection would hide. A coordinator that wants that evidence reads
+`result_path` itself, as a file, on its own terms — and, when the scope of a
+task was ever unclear, that is what a `stop_conditions` entry and a direct
+question to the parent are for, not something folded into this event.
 
 ## Why `--wait` is never passed
 

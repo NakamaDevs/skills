@@ -42,12 +42,17 @@ defmodule LaneTaskEnvelopeTest do
         "graph_depth",
         "panes",
         "required_initial_state",
+        "integration",
+        "affects_runtime",
+        "feature_test_inventory_path",
         "inputs",
         "outputs",
         "observable_goal",
         "red_tests",
         "green_commands",
         "repository_gates",
+        "post_integration_tests",
+        "deletion_decisions",
         "stop_conditions",
         "protected_actions",
         "writers",
@@ -198,7 +203,7 @@ defmodule LaneTaskEnvelopeTest do
   end
 
   describe "command lists" do
-    for field <- ["red_tests", "green_commands", "repository_gates"] do
+    for field <- ["red_tests", "green_commands", "repository_gates", "post_integration_tests"] do
       test "#{field} must be a non-empty list" do
         envelope = Map.put(@valid, unquote(field), [])
 
@@ -250,6 +255,132 @@ defmodule LaneTaskEnvelopeTest do
                  envelope
                )
       end
+    end
+  end
+
+  describe "repository_gates handoff cadence" do
+    test "each repository gate must declare when: handoff" do
+      envelope =
+        Map.put(@valid, "repository_gates", [
+          %{"command" => ["mise", "run", "verify:quick"], "timeout_ms" => 60_000}
+        ])
+
+      assert "repository_gates[0].when must equal \"handoff\"" in errors(envelope)
+    end
+
+    test "a repository gate must not declare a per-commit cadence" do
+      envelope =
+        Map.put(@valid, "repository_gates", [
+          %{
+            "command" => ["mise", "run", "verify:quick"],
+            "timeout_ms" => 60_000,
+            "when" => "every-commit"
+          }
+        ])
+
+      assert "repository_gates[0].when must equal \"handoff\"" in errors(envelope)
+    end
+  end
+
+  describe "integration" do
+    test "must include target, base_head, and branch_lifecycle" do
+      envelope = Map.put(@valid, "integration", %{})
+
+      integration_errors = errors(envelope)
+      assert Enum.any?(integration_errors, &String.starts_with?(&1, "integration"))
+    end
+
+    test "target must be a non-empty string" do
+      envelope = put_in(@valid, ["integration", "target"], "")
+      assert "integration.target must be a non-empty string" in errors(envelope)
+    end
+
+    test "base_head must be a full 40-character lowercase commit sha" do
+      envelope = put_in(@valid, ["integration", "base_head"], "main")
+
+      assert "integration.base_head must be a full 40-character lowercase commit sha" in errors(
+               envelope
+             )
+    end
+
+    test "branch_lifecycle must be short-lived" do
+      envelope = put_in(@valid, ["integration", "branch_lifecycle"], "long-lived")
+      assert "integration.branch_lifecycle must be \"short-lived\"" in errors(envelope)
+    end
+
+    test "rejects an unsupported integration field" do
+      envelope = put_in(@valid, ["integration", "extra"], "nope")
+      assert "integration.extra is not a permitted field" in errors(envelope)
+    end
+  end
+
+  describe "affects_runtime and live_smoke" do
+    test "affects_runtime must be a boolean" do
+      envelope = Map.put(@valid, "affects_runtime", "yes")
+      assert "affects_runtime must be a boolean" in errors(envelope)
+    end
+
+    test "live_smoke is required when affects_runtime is true and absent" do
+      envelope = Map.put(@valid, "affects_runtime", true)
+      assert "live_smoke is required when affects_runtime is true" in errors(envelope)
+    end
+
+    test "live_smoke must be a valid command object when affects_runtime is true" do
+      envelope =
+        @valid
+        |> Map.put("affects_runtime", true)
+        |> Map.put("live_smoke", %{"command" => "curl localhost", "timeout_ms" => 5000})
+
+      assert "live_smoke.command must be an argv list, not a shell string" in errors(envelope)
+    end
+
+    test "live_smoke passes command safety rules when affects_runtime is true" do
+      envelope =
+        @valid
+        |> Map.put("affects_runtime", true)
+        |> Map.put("live_smoke", %{
+          "command" => ["curl", "-fsS", "http://localhost:4000/health"],
+          "timeout_ms" => 5000
+        })
+
+      assert [] == errors(envelope)
+    end
+
+    test "live_smoke must be absent when affects_runtime is false" do
+      envelope =
+        Map.put(@valid, "live_smoke", %{
+          "command" => ["curl", "-fsS", "http://localhost:4000/health"],
+          "timeout_ms" => 5000
+        })
+
+      assert "live_smoke must be absent when affects_runtime is false" in errors(envelope)
+    end
+  end
+
+  test "feature_test_inventory_path must be a non-empty relative path" do
+    envelope = Map.put(@valid, "feature_test_inventory_path", "/absolute/inventory.md")
+    assert "feature_test_inventory_path must be a relative path" in errors(envelope)
+  end
+
+  describe "deletion_decisions" do
+    test "an empty list is valid" do
+      envelope = Map.put(@valid, "deletion_decisions", [])
+      assert [] == errors(envelope)
+    end
+
+    test "must reject deletion_decisions that is not a list" do
+      envelope = Map.put(@valid, "deletion_decisions", "none")
+      assert "deletion_decisions must be a list of {target, replacement_decision} objects" in errors(
+               envelope
+             )
+    end
+
+    test "each entry must have a non-empty target and replacement_decision" do
+      envelope = Map.put(@valid, "deletion_decisions", [%{"target" => "old_field.ex"}])
+
+      assert "deletion_decisions[0] must have a non-empty target and replacement_decision" in errors(
+               envelope
+             )
     end
   end
 

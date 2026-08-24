@@ -37,10 +37,13 @@ defmodule NotifyParent do
   @spec parent_target(map()) :: String.t()
   def parent_target(task), do: task["parent_agent"]
 
+  defp event_type(%{"status" => "blocked"}), do: "lane_task_blocked"
+  defp event_type(_result), do: "lane_task_result"
+
   @spec build_event(map(), map()) :: map()
   def build_event(task, result) do
     event = %{
-      "type" => "lane_task_result",
+      "type" => event_type(result),
       "issue" => task["issue"],
       "branch" => task["branch"],
       "role" => task["role"],

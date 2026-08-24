@@ -16,8 +16,12 @@ pass after).
 - The issue, owner, branch, and worktree for the lane task.
 - The parent task id and the exact `parent_agent` herdr target that must
   receive the finished notification.
-- The observable goal, inputs, and outputs the coordinator expects.
-- The RED tests, GREEN commands, and repository gates the lane must run.
+- The exact `integration.target` branch and `integration.base_head` commit
+  this task integrates against.
+- The observable goal, inputs, outputs, and `feature_test_inventory_path`
+  the coordinator expects.
+- The RED tests, GREEN commands, repository gates, and (when the task
+  affects a running instance of the software) the `live_smoke` check.
 
 Read [envelope-fields.md](references/envelope-fields.md) for the full field
 list, [command-safety.md](references/command-safety.md) for the argv and
@@ -42,7 +46,16 @@ copy its shape rather than inventing a new one.
 
 4. Fix every reported error and re-run the validator until it prints
    `valid`.
-5. When the lane finishes and writes its result file, validate the result
+5. Run `red_tests` and confirm they fail, then implement, then run
+   `green_commands` and confirm they pass. Run `repository_gates` once, at
+   handoff — not after every intermediate commit. If `affects_runtime` is
+   `true`, also run `live_smoke` against the actually running software, not
+   only its unit-level double.
+6. After the branch integrates into `integration.target`, run
+   `post_integration_tests` against the resulting trunk before treating the
+   task as finished. The next lane task for this issue starts from that
+   updated trunk head, not from a stale `base_head`.
+7. When the lane finishes and writes its result file, validate the result
    against the task and notify the parent:
 
    ```
@@ -58,10 +71,18 @@ Use local file reads and edits to the envelope, result, and this skill's own
 files. Use `elixir` to run the validators and the ExUnit suite in `test/`.
 Use `mise run verify:quick` to run the repository's own gates.
 
-Do not run `notify_parent.exs` against a live `parent_agent` unless that
-target is a real herdr agent the user has confirmed is ready to receive it;
+Do not run `notify_parent.exs` against a live `parent_agent` unless the user
+named that exact target and asked for the notification, or that target is a
+real herdr agent the user has otherwise confirmed is ready to receive it;
 `notify_parent.exs` submits a real prompt through `herdr agent prompt`, which
 is a visible action in another agent's pane.
+
+Do not post detailed RED/GREEN test logs, per-commit status, or other
+implementation-level detail to Linear. Linear gets a human project update
+only after a material milestone (a slice lands, a gate that was failing now
+passes, the loop notified its parent) — not on every commit and not as a
+substitute for `red_evidence`/`green_evidence`, which live in the result
+file, not the tracker.
 
 ## Stop conditions
 
@@ -73,6 +94,11 @@ validator.
 
 Stop before calling `notify_parent.exs` for real when the `parent_agent`
 target is unknown, unconfirmed, or not currently running.
+
+When the requested scope is unknown or ambiguous, that is itself a stop
+condition: ask the parent agent (or the user, when there is no parent turn to
+ask) before editing. Guessing at scope and then trying to relabel the result
+as a "blocker" after the fact does not substitute for asking first.
 
 ## Output and quality gates
 
@@ -86,6 +112,12 @@ elixir skills/define-lane-task-contract/test/lane_task_envelope_test.exs
 elixir skills/define-lane-task-contract/test/lane_task_result_test.exs
 elixir skills/define-lane-task-contract/test/notify_parent_test.exs
 ```
+
+Update [`references/feature-test-inventory.md`](references/feature-test-inventory.md)
+in the same change that adds, changes, or removes an enforceable rule. Record
+any deletion of existing behavior or an existing test in
+`deletion_decisions`, with its replacement decision, rather than dropping it
+silently.
 
 Return the exact validator output (or ExUnit summary), not just "it works."
 A valid envelope does not authorize a lane to run; it only proves the

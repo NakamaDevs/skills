@@ -9,12 +9,17 @@ defmodule LaneTaskEnvelope do
 
   @allowed_fields ~w(
     role owner issue branch worktree parent_task parent_agent result_path
-    notification_state graph_depth panes required_initial_state inputs
+    notification_state graph_depth panes required_initial_state integration
+    affects_runtime live_smoke feature_test_inventory_path inputs
     outputs observable_goal red_tests green_commands repository_gates
-    stop_conditions protected_actions writers agent
+    post_integration_tests deletion_decisions stop_conditions
+    protected_actions writers agent
   )
 
   @required_initial_state_fields ~w(branch clean_worktree base_ref)
+  @integration_fields ~w(target base_head branch_lifecycle)
+  @branch_lifecycles ~w(short-lived)
+  @gate_cadences ~w(handoff)
 
   @notification_states ~w(pending sent acknowledged)
 
@@ -24,6 +29,7 @@ defmodule LaneTaskEnvelope do
   @branch_pattern ~r{^(#{Enum.join(@branch_type_prefixes, "|")})/[a-z0-9][a-z0-9/-]*$}
   @parent_agent_pattern ~r/^[a-z][a-z0-9_-]{0,31}$/
   @argv_token_pattern ~r{^[A-Za-z0-9_./:=,@-]+$}
+  @sha_pattern ~r/^[0-9a-f]{40}$/
 
   @db_lifecycle_binaries MapSet.new(~w(
     pg_ctl pg_ctlcluster initdb createdb dropdb createuser dropuser
@@ -39,7 +45,8 @@ defmodule LaneTaskEnvelope do
     claude-fable-5 claude-opus-5 claude-sonnet-5 claude-haiku-4-5-20251001
   ))
 
-  @command_fields ~w(red_tests green_commands repository_gates)
+  @command_fields ~w(red_tests green_commands repository_gates post_integration_tests)
+  @gated_command_fields ~w(repository_gates)
 
   def supported_claude_models, do: @supported_claude_models
   def protected_action_vocabulary, do: @protected_action_vocabulary
@@ -51,10 +58,15 @@ defmodule LaneTaskEnvelope do
       |> collect(unsupported_field_errors(envelope))
       |> collect(scalar_field_errors(envelope))
       |> collect(required_initial_state_errors(envelope))
+      |> collect(integration_errors(envelope))
+      |> collect(affects_runtime_errors(envelope))
+      |> collect(live_smoke_errors(envelope))
+      |> collect(relative_path_field_errors(envelope, "feature_test_inventory_path"))
       |> collect(string_list_errors(envelope, "inputs"))
       |> collect(string_list_errors(envelope, "outputs"))
       |> collect(observable_goal_errors(envelope))
       |> collect(command_list_errors(envelope))
+      |> collect(deletion_decision_errors(envelope))
       |> collect(string_list_errors(envelope, "stop_conditions"))
       |> collect(protected_action_errors(envelope))
       |> collect(writer_errors(envelope))
@@ -188,20 +200,22 @@ defmodule LaneTaskEnvelope do
     end
   end
 
-  defp result_path_errors(envelope) do
-    case Map.fetch(envelope, "result_path") do
+  defp result_path_errors(envelope), do: relative_path_field_errors(envelope, "result_path")
+
+  defp relative_path_field_errors(envelope, field) do
+    case Map.fetch(envelope, field) do
       :error ->
-        ["result_path is required"]
+        ["#{field} is required"]
 
       {:ok, value} when is_binary(value) and value != "" ->
         cond do
-          String.starts_with?(value, "/") -> ["result_path must be a relative path"]
-          ".." in Path.split(value) -> ["result_path must not contain a parent directory segment"]
+          String.starts_with?(value, "/") -> ["#{field} must be a relative path"]
+          ".." in Path.split(value) -> ["#{field} must not contain a parent directory segment"]
           true -> []
         end
 
       {:ok, _value} ->
-        ["result_path must be a non-empty string"]
+        ["#{field} must be a non-empty string"]
     end
   end
 
@@ -277,6 +291,129 @@ defmodule LaneTaskEnvelope do
     end
   end
 
+  defp integration_errors(envelope) do
+    case Map.fetch(envelope, "integration") do
+      :error ->
+        ["integration is required"]
+
+      {:ok, integration} when is_map(integration) ->
+        integration_map_errors(integration)
+
+      {:ok, _value} ->
+        ["integration must be a JSON object"]
+    end
+  end
+
+  defp integration_map_errors(integration) do
+    []
+    |> collect(
+      for key <- Map.keys(integration), key not in @integration_fields do
+        "integration.#{key} is not a permitted field"
+      end
+    )
+    |> collect(
+      for field <- @integration_fields, not Map.has_key?(integration, field) do
+        "integration.#{field} is required"
+      end
+    )
+    |> collect(integration_target_errors(integration))
+    |> collect(integration_base_head_errors(integration))
+    |> collect(integration_branch_lifecycle_errors(integration))
+  end
+
+  defp integration_target_errors(integration) do
+    case Map.fetch(integration, "target") do
+      {:ok, value} when is_binary(value) and value != "" -> []
+      {:ok, _value} -> ["integration.target must be a non-empty string"]
+      :error -> []
+    end
+  end
+
+  defp integration_base_head_errors(integration) do
+    case Map.fetch(integration, "base_head") do
+      {:ok, value} when is_binary(value) ->
+        if Regex.match?(@sha_pattern, value) do
+          []
+        else
+          ["integration.base_head must be a full 40-character lowercase commit sha"]
+        end
+
+      {:ok, _value} ->
+        ["integration.base_head must be a full 40-character lowercase commit sha"]
+
+      :error ->
+        []
+    end
+  end
+
+  defp integration_branch_lifecycle_errors(integration) do
+    case Map.fetch(integration, "branch_lifecycle") do
+      {:ok, value} when value in @branch_lifecycles -> []
+      {:ok, _value} -> ["integration.branch_lifecycle must be \"short-lived\""]
+      :error -> []
+    end
+  end
+
+  defp affects_runtime_errors(envelope) do
+    case Map.fetch(envelope, "affects_runtime") do
+      :error -> ["affects_runtime is required"]
+      {:ok, value} when is_boolean(value) -> []
+      {:ok, _value} -> ["affects_runtime must be a boolean"]
+    end
+  end
+
+  defp live_smoke_errors(envelope) do
+    affects_runtime = Map.get(envelope, "affects_runtime")
+    has_live_smoke = Map.has_key?(envelope, "live_smoke")
+
+    cond do
+      affects_runtime == true and not has_live_smoke ->
+        ["live_smoke is required when affects_runtime is true"]
+
+      affects_runtime == true and has_live_smoke ->
+        command_object_errors_with_prefix("live_smoke", Map.get(envelope, "live_smoke"))
+
+      affects_runtime != true and has_live_smoke ->
+        ["live_smoke must be absent when affects_runtime is false"]
+
+      true ->
+        []
+    end
+  end
+
+  defp deletion_decision_errors(envelope) do
+    case Map.fetch(envelope, "deletion_decisions") do
+      :error ->
+        ["deletion_decisions is required"]
+
+      {:ok, decisions} when is_list(decisions) ->
+        decisions
+        |> Enum.with_index()
+        |> Enum.flat_map(fn {decision, index} -> deletion_decision_object_errors(index, decision) end)
+
+      {:ok, _value} ->
+        ["deletion_decisions must be a list of {target, replacement_decision} objects"]
+    end
+  end
+
+  defp deletion_decision_object_errors(index, decision) when is_map(decision) do
+    has_target = is_binary(Map.get(decision, "target")) and Map.get(decision, "target") != ""
+
+    has_replacement_decision =
+      is_binary(Map.get(decision, "replacement_decision")) and
+        Map.get(decision, "replacement_decision") != ""
+
+    if has_target and has_replacement_decision do
+      []
+    else
+      ["deletion_decisions[#{index}] must have a non-empty target and replacement_decision"]
+    end
+  end
+
+  defp deletion_decision_object_errors(index, _decision) do
+    ["deletion_decisions[#{index}] must be an object with target and replacement_decision"]
+  end
+
   defp string_list_errors(envelope, field) do
     case Map.fetch(envelope, field) do
       :error ->
@@ -316,6 +453,8 @@ defmodule LaneTaskEnvelope do
   end
 
   defp command_list_field_errors(envelope, field) do
+    gated = field in @gated_command_fields
+
     case Map.fetch(envelope, field) do
       :error ->
         ["#{field} is required"]
@@ -323,24 +462,30 @@ defmodule LaneTaskEnvelope do
       {:ok, list} when is_list(list) and list != [] ->
         list
         |> Enum.with_index()
-        |> Enum.flat_map(fn {command, index} -> command_object_errors(field, index, command) end)
+        |> Enum.flat_map(fn {command, index} ->
+          command_object_errors("#{field}[#{index}]", command, gated)
+        end)
 
       {:ok, _value} ->
         ["#{field} must be a non-empty list of command objects"]
     end
   end
 
-  defp command_object_errors(field, index, command) when is_map(command) do
-    prefix = "#{field}[#{index}]"
+  defp command_object_errors_with_prefix(prefix, command), do: command_object_errors(prefix, command, false)
 
+  defp command_object_errors(prefix, command, gated) when is_map(command) do
     []
     |> collect(argv_errors(prefix, Map.get(command, "command")))
     |> collect(timeout_errors(prefix, Map.get(command, "timeout_ms")))
+    |> collect(if gated, do: cadence_errors(prefix, Map.get(command, "when")), else: [])
   end
 
-  defp command_object_errors(field, index, _command) do
-    ["#{field}[#{index}] must be a command object with command and timeout_ms"]
+  defp command_object_errors(prefix, _command, _gated) do
+    ["#{prefix} must be a command object with command and timeout_ms"]
   end
+
+  defp cadence_errors(_prefix, value) when value in @gate_cadences, do: []
+  defp cadence_errors(prefix, _value), do: ["#{prefix}.when must equal \"handoff\""]
 
   defp argv_errors(prefix, command) when is_binary(command) do
     ["#{prefix}.command must be an argv list, not a shell string"]

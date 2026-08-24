@@ -4,7 +4,7 @@ defmodule LaneTaskResult do
   the task envelope it reports against.
   """
 
-  @allowed_fields ~w(task_issue result_path status commit evidence)
+  @allowed_fields ~w(task_issue result_path status commit red_evidence green_evidence)
   @statuses ~w(green red blocked)
   @sha_pattern ~r/^[0-9a-f]{40}$/
 
@@ -17,7 +17,8 @@ defmodule LaneTaskResult do
       |> Kernel.++(result_path_errors(result, task))
       |> Kernel.++(status_errors(result))
       |> Kernel.++(commit_errors(result))
-      |> Kernel.++(evidence_errors(result))
+      |> Kernel.++(evidence_errors(result, "red_evidence"))
+      |> Kernel.++(evidence_errors(result, "green_evidence"))
 
     case errors do
       [] -> :ok
@@ -92,20 +93,20 @@ defmodule LaneTaskResult do
     end
   end
 
-  defp evidence_errors(result) do
-    case Map.fetch(result, "evidence") do
+  defp evidence_errors(result, field) do
+    case Map.fetch(result, field) do
       :error ->
-        ["evidence must be a non-empty list of non-empty strings"]
+        ["#{field} must be a non-empty list of non-empty strings"]
 
       {:ok, list} when is_list(list) ->
         if list != [] and Enum.all?(list, &(is_binary(&1) and &1 != "")) do
           []
         else
-          ["evidence must be a non-empty list of non-empty strings"]
+          ["#{field} must be a non-empty list of non-empty strings"]
         end
 
       {:ok, _value} ->
-        ["evidence must be a non-empty list of non-empty strings"]
+        ["#{field} must be a non-empty list of non-empty strings"]
     end
   end
 end

@@ -4,9 +4,9 @@
   "issue": "NAK-452",
   "branch": "feat/cx/nak-452-enforceable-local-coordinator-agent",
   "worktree": "/Users/hdb/.herdr/worktrees/skills/feat-cx-nak-452-enforceable-local-coordinator-agent",
-  "parent_task": "coordinator-nak-452-slice-1",
-  "parent_agent": "coordinator",
-  "result_path": "results/nak-452-slice-1.json",
+  "parent_task": "kantoku-m0-proven-loop",
+  "parent_agent": "kantoku-assurance-coord",
+  "result_path": "results/nak-452-slice-2.json",
   "notification_state": "pending",
   "graph_depth": 1,
   "panes": 1,
@@ -15,6 +15,13 @@
     "clean_worktree": true,
     "base_ref": "main"
   },
+  "integration": {
+    "target": "main",
+    "base_head": "16d14982cda257e58c64b0a3ef66b81a5517c123",
+    "branch_lifecycle": "short-lived"
+  },
+  "affects_runtime": false,
+  "feature_test_inventory_path": "skills/define-lane-task-contract/references/feature-test-inventory.md",
   "inputs": [
     "AGENTS.md",
     "skills/bootstrap-symphony-workflow/SKILL.md"
@@ -23,7 +30,7 @@
     "skills/define-lane-task-contract/SKILL.md",
     "skills/define-lane-task-contract/scripts/notify_parent.exs"
   ],
-  "observable_goal": "skills/define-lane-task-contract installs with a validated example envelope and a passing ExUnit suite.",
+  "observable_goal": "skills/define-lane-task-contract validates the M0 proven-loop fields and its ExUnit suite passes.",
   "red_tests": [
     {
       "command": ["elixir", "skills/define-lane-task-contract/test/lane_task_envelope_test.exs"],
@@ -47,13 +54,27 @@
   "repository_gates": [
     {
       "command": ["mise", "run", "verify:quick"],
+      "timeout_ms": 60000,
+      "when": "handoff"
+    }
+  ],
+  "post_integration_tests": [
+    {
+      "command": ["mise", "run", "catalog:test"],
       "timeout_ms": 60000
+    }
+  ],
+  "deletion_decisions": [
+    {
+      "target": "LaneTaskResult evidence field and its ExUnit assertions",
+      "replacement_decision": "split into red_evidence and green_evidence so RED proof and GREEN proof are recorded separately; replacement tests assert both new fields"
     }
   ],
   "stop_conditions": [
     "a repository gate fails",
     "the worktree is not clean at start",
-    "the issue is closed or canceled before the observable goal is reached"
+    "the issue is closed or canceled before the observable goal is reached",
+    "the scope becomes unknown or ambiguous and the parent has not yet answered a clarification request"
   ],
   "protected_actions": [
     "merge",

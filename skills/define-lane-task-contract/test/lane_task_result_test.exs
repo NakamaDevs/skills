@@ -13,7 +13,8 @@ defmodule LaneTaskResultTest do
     "result_path" => @task["result_path"],
     "status" => "green",
     "commit" => String.duplicate("a", 40),
-    "evidence" => ["mise run verify:quick: pass"]
+    "red_evidence" => ["lane_task_envelope_test.exs failed before implementation existed"],
+    "green_evidence" => ["mise run verify:quick: pass"]
   }
 
   defp errors(result, task \\ @task) do
@@ -66,8 +67,13 @@ defmodule LaneTaskResultTest do
     assert "commit must be a full 40-character lowercase commit sha" in errors(result)
   end
 
-  test "evidence must be a non-empty list of non-empty strings" do
-    result = Map.put(@valid_result, "evidence", [])
-    assert "evidence must be a non-empty list of non-empty strings" in errors(result)
+  test "red_evidence must be a non-empty list of non-empty strings" do
+    result = Map.put(@valid_result, "red_evidence", [])
+    assert "red_evidence must be a non-empty list of non-empty strings" in errors(result)
+  end
+
+  test "green_evidence must be a non-empty list of non-empty strings" do
+    result = Map.put(@valid_result, "green_evidence", [])
+    assert "green_evidence must be a non-empty list of non-empty strings" in errors(result)
   end
 end
