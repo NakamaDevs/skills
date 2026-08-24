@@ -44,7 +44,20 @@ defmodule LaneTaskEnvelopeTest do
     end
 
     test "exits 0 and prints valid with exactly one operand" do
-      {output, exit_code} = System.cmd("elixir", [@envelope_script, @fixture], stderr_to_stdout: true)
+      # A real envelope pointing at this repository's actual worktree and
+      # branch would make this assertion depend on this repository's live
+      # merge base with main — genuinely different before and after this
+      # branch is integrated (merge-base(branch, main) becomes the
+      # branch's own tip once main contains it), so the exact same test
+      # would start failing the moment integration lands, for no reason
+      # related to the CLI itself. An isolated temporary repository with a
+      # merge base computed fresh, right here, is deterministic regardless
+      # of this repository's own history.
+      repo = init_temp_repo()
+      envelope = temp_repo_envelope(repo, repo.merge_base)
+      path = write_temp_envelope(envelope)
+
+      {output, exit_code} = System.cmd("elixir", [@envelope_script, path], stderr_to_stdout: true)
       assert exit_code == 0
       assert output =~ "valid"
     end
@@ -160,22 +173,31 @@ defmodule LaneTaskEnvelopeTest do
   end
 
   describe "resolve_integration_head/1 (live git verification, not part of validate/1)" do
+    # These two use an isolated temporary repository, not this repository's
+    # own worktree/branch: this repository's real merge-base with main
+    # moves the moment this branch is integrated (merge-base(branch, main)
+    # becomes the branch's own tip once main contains it), which would
+    # make a fixture built from @valid's real worktree/branch pass or fail
+    # depending on integration state rather than on what this function
+    # actually does. A fresh repository with a merge base computed right
+    # here stays correct regardless of what happens to this branch.
     test "accepts when integration.base_head matches the real merge base in the declared worktree" do
-      assert :ok == LaneTaskEnvelope.resolve_integration_head(@valid)
+      repo = init_temp_repo()
+      envelope = temp_repo_envelope(repo, repo.merge_base)
+      assert :ok == LaneTaskEnvelope.resolve_integration_head(envelope)
+    end
+
+    test "rejects when integration.base_head does not match the actual merge base" do
+      repo = init_temp_repo()
+      envelope = temp_repo_envelope(repo, repo.main_head_after_advance)
+      assert {:error, [error]} = LaneTaskEnvelope.resolve_integration_head(envelope)
+      assert error =~ "does not match the merge base"
     end
 
     test "rejects when integration.base_head does not exist in the worktree" do
       envelope = put_in(@valid, ["integration", "base_head"], String.duplicate("0", 40))
       assert {:error, [error]} = LaneTaskEnvelope.resolve_integration_head(envelope)
       assert error =~ "does not exist in the worktree"
-    end
-
-    test "rejects when integration.base_head does not match the actual merge base" do
-      {head, 0} = System.cmd("git", ["rev-parse", "HEAD"])
-
-      envelope = put_in(@valid, ["integration", "base_head"], String.trim(head))
-      assert {:error, [error]} = LaneTaskEnvelope.resolve_integration_head(envelope)
-      assert error =~ "does not match the merge base"
     end
 
     test "rejects when the declared worktree does not exist" do
