@@ -1,5 +1,12 @@
+notify_parent_argv = System.argv()
+# lane_task_envelope.exs and lane_task_result.exs each auto-run their own
+# CLI when System.argv() is non-empty. Clear argv before requiring them so
+# that this script's own argv never triggers their guards with the wrong
+# shape, then restore it before running this script's own CLI below.
+System.argv([])
 Code.require_file(Path.join([__DIR__, "lane_task_envelope.exs"]))
 Code.require_file(Path.join([__DIR__, "lane_task_result.exs"]))
+System.argv(notify_parent_argv)
 
 defmodule NotifyParent do
   @moduledoc """

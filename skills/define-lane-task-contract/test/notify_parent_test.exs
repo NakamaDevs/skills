@@ -107,4 +107,35 @@ defmodule NotifyParentTest do
     refute function_exported?(NotifyParent, :send!, 3)
     assert function_exported?(NotifyParent, :send!, 2)
   end
+
+  describe "the CLI entry point (subprocess, never reaches send!)" do
+    @notify_parent_script Path.join([__DIR__, "..", "scripts", "notify_parent.exs"])
+
+    defp write_temp_json(basename, content) do
+      path =
+        Path.join(
+          System.tmp_dir!(),
+          "#{basename}-#{System.unique_integer([:positive])}.json"
+        )
+
+      File.write!(path, JSON.encode!(content))
+      path
+    end
+
+    test "validates the result against the result schema, not against the task's own fields" do
+      # Regression: requiring lane_task_envelope.exs and lane_task_result.exs
+      # while the real CLI argv is non-empty must not trigger their own
+      # bottom-of-file CLI guards with that outer argv.
+      result_path = write_temp_json("broken-result", Map.put(@result, "commit", nil))
+
+      {output, exit_code} =
+        System.cmd("elixir", [@notify_parent_script, @task_fixture, result_path],
+          stderr_to_stdout: true
+        )
+
+      assert exit_code == 1
+      refute output =~ "is not a permitted result field"
+      assert output =~ "commit is required when status is \"green\""
+    end
+  end
 end
