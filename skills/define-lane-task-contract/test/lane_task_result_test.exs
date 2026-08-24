@@ -1,5 +1,10 @@
 ExUnit.start()
 
+# lane_task_envelope.exs and lane_task_result.exs each exit 2 when their
+# own CLI sees zero or surplus operands. Suppress that guard while
+# requiring them as a library; the subprocess tests below start a fresh
+# `elixir` process, so this BEAM-application-env flag never reaches them.
+Application.put_env(:lane_task_contract, :cli_suppressed, true)
 Code.require_file(Path.join([__DIR__, "..", "scripts", "lane_task_envelope.exs"]))
 Code.require_file(Path.join([__DIR__, "..", "scripts", "lane_task_result.exs"]))
 
@@ -67,6 +72,21 @@ defmodule LaneTaskResultTest do
     assert "commit must be a full 40-character lowercase commit sha" in errors(result)
   end
 
+  test "commit may be entirely omitted for a red result" do
+    result = @valid_result |> Map.delete("commit") |> Map.put("status", "red")
+    assert :ok == LaneTaskResult.validate(result, @task)
+  end
+
+  test "commit may be entirely omitted for a blocked result" do
+    result = @valid_result |> Map.delete("commit") |> Map.put("status", "blocked")
+    assert :ok == LaneTaskResult.validate(result, @task)
+  end
+
+  test "commit omission is rejected for a green result" do
+    result = Map.delete(@valid_result, "commit")
+    assert "commit is required when status is \"green\"" in errors(result)
+  end
+
   test "red_evidence must be a non-empty list of non-empty strings" do
     result = Map.put(@valid_result, "red_evidence", [])
     assert "red_evidence must be a non-empty list of non-empty strings" in errors(result)
@@ -75,5 +95,48 @@ defmodule LaneTaskResultTest do
   test "green_evidence must be a non-empty list of non-empty strings" do
     result = Map.put(@valid_result, "green_evidence", [])
     assert "green_evidence must be a non-empty list of non-empty strings" in errors(result)
+  end
+
+  describe "the CLI entry point (subprocess)" do
+    @result_script Path.join([__DIR__, "..", "scripts", "lane_task_result.exs"])
+
+    defp write_temp_json(basename, content) do
+      path =
+        Path.join(
+          System.tmp_dir!(),
+          "#{basename}-#{System.unique_integer([:positive])}.json"
+        )
+
+      File.write!(path, JSON.encode!(content))
+      path
+    end
+
+    test "exits 2 with zero operands" do
+      {output, exit_code} = System.cmd("elixir", [@result_script], stderr_to_stdout: true)
+      assert exit_code == 2
+      assert output =~ "usage:"
+    end
+
+    test "exits 2 with surplus operands" do
+      result_path = write_temp_json("valid-result", @valid_result)
+
+      {output, exit_code} =
+        System.cmd("elixir", [@result_script, result_path, @task_fixture, "extra"],
+          stderr_to_stdout: true
+        )
+
+      assert exit_code == 2
+      assert output =~ "usage:"
+    end
+
+    test "exits 0 and prints valid with exactly two operands in order" do
+      result_path = write_temp_json("valid-result", @valid_result)
+
+      {output, exit_code} =
+        System.cmd("elixir", [@result_script, result_path, @task_fixture], stderr_to_stdout: true)
+
+      assert exit_code == 0
+      assert output =~ "valid"
+    end
   end
 end

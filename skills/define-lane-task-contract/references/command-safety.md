@@ -28,14 +28,42 @@ concatenating two commands (for example `"test && rm -rf /"`).
 
 ## No manual database lifecycle command
 
-A command's first argv token (its basename, case-insensitive) must not be one
-of: `pg_ctl`, `pg_ctlcluster`, `initdb`, `createdb`, `dropdb`, `createuser`,
-`dropuser`, `mysqladmin`, `mysqld`, `mongod`, `mongosh`, `redis-server`,
-`redis-cli`, `sqlite3`. A lane task drives the database only through the
-repository's own tasks (`mix ecto.*`, `mise run ...`), never by starting,
-stopping, creating, or dropping a database directly. Direct lifecycle control
-of a database is exactly the kind of effect this contract keeps out of an
-unattended lane.
+Every argv token (its basename, case-insensitive) is checked — not only the
+first — against: `pg_ctl`, `pg_ctlcluster`, `initdb`, `createdb`, `dropdb`,
+`createuser`, `dropuser`, `mysqladmin`, `mysqld`, `mongod`, `mongosh`,
+`redis-server`, `redis-cli`, `sqlite3`. A lane task drives the database only
+through the repository's own tasks (`mix ecto.*`, `mise run ...`), never by
+starting, stopping, creating, or dropping a database directly. Direct
+lifecycle control of a database is exactly the kind of effect this contract
+keeps out of an unattended lane.
+
+Checking every token, not just the first, matters because `env`, `mise exec
+--`, and a shell's `-c` form are all legitimate ways to run an *allowed*
+command indirectly, and each could otherwise smuggle a denylisted one past a
+first-token-only check:
+
+```json
+["env", "DATABASE_URL=postgres://...", "dropdb", "app_dev"]
+["mise", "exec", "--", "dropdb", "app_dev"]
+["sh", "-c", "dropdb"]
+["bash", "-c", "dropdb"]
+```
+
+The validator resolves through `env` (skipping its flags and `NAME=VALUE`
+assignments), `mise exec --`, and `sh -c`/`bash -c`/`zsh -c`/`dash
+-c`/`ksh -c` to find the command a wrapper would actually run, and checks
+that resolved command too. All four examples above are rejected.
+
+## No leaf delegation to another herdr agent
+
+When the envelope's `delegation_allowed` is `false`, no command anywhere in
+the envelope (`red_tests`, `green_commands`, `repository_gates`,
+`post_integration_tests`, `live_smoke`) may invoke `herdr agent start` or
+`herdr agent prompt` — a leaf task does not spawn or instruct another agent.
+This is enforced the same way as every other rule here: by inspecting the
+declared argv command, never by anything Herdr itself enforces. See
+[envelope-fields.md](envelope-fields.md#bounded-execution-shape) for when
+`delegation_allowed` must be `false`.
 
 ## No wait over 60000 ms
 
@@ -63,3 +91,22 @@ Two more bounds apply to the envelope as a whole, not to any one command:
 - `panes` must not exceed `4`.
 
 See [envelope-fields.md](envelope-fields.md) for both.
+
+## `validate/1` never runs a command
+
+Every rule above is checked by reading the declared `command` array as data.
+`LaneTaskEnvelope.validate/1` never executes anything it validates, and it
+never touches the filesystem or the network — that is what keeps it fast,
+deterministic, and safe to run against an untrusted envelope. The one
+exception in this skill is `resolve_integration_head/1`, which is a
+separate, explicitly-invoked function that does shell out to `git`; see
+[envelope-fields.md](envelope-fields.md#integration-and-branch-lifecycle).
+
+## The CLI takes exactly the operands it documents
+
+`elixir lane_task_envelope.exs <envelope.json>` takes exactly one operand;
+`elixir lane_task_result.exs <result.json> <task.json>` and `elixir
+notify_parent.exs <task.json> <result.json>` each take exactly two, in the
+order shown. Zero operands or more than the documented count print a usage
+line to stderr and exit `2`, rather than silently taking the first argument
+and ignoring the rest.

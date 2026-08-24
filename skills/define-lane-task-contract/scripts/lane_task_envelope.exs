@@ -9,7 +9,8 @@ defmodule LaneTaskEnvelope do
 
   @allowed_fields ~w(
     role owner issue branch worktree parent_task parent_agent result_path
-    notification_state graph_depth panes required_initial_state integration
+    notification_state graph_depth panes delegation_allowed
+    required_initial_state integration
     affects_runtime live_smoke feature_test_inventory_path inputs
     outputs observable_goal red_tests green_commands repository_gates
     post_integration_tests deletion_decisions stop_conditions
@@ -36,6 +37,13 @@ defmodule LaneTaskEnvelope do
     mysqladmin mysqld mongod mongosh redis-server redis-cli sqlite3
   ))
 
+  @shell_wrappers MapSet.new(~w(sh bash zsh dash ksh))
+
+  @trivial_probe_commands MapSet.new([["true"]])
+  @non_probe_binaries MapSet.new(~w(
+    elixir mix python python3 pytest npm yarn node cargo go rspec jest ruby bundle
+  ))
+
   @protected_action_vocabulary MapSet.new(~w(
     merge push force-push release deploy production-effects
     credential-changes public-ingress
@@ -50,6 +58,88 @@ defmodule LaneTaskEnvelope do
 
   def supported_claude_models, do: @supported_claude_models
   def protected_action_vocabulary, do: @protected_action_vocabulary
+
+  @doc """
+  Live git verification that `integration.base_head` exists and matches
+  the actual merge base of `branch` and `integration.target`, resolved in
+  the declared `worktree`. This is deliberately separate from `validate/1`,
+  which stays pure JSON-schema validation with no filesystem or process
+  I/O: `validate/1` alone does NOT prove the envelope's integration claim
+  is real, only that it is well-formed. Call this before trusting
+  `integration.base_head` for anything, and never claim `validate/1` alone
+  covers it.
+  """
+  @spec resolve_integration_head(map()) :: :ok | {:error, [String.t()]}
+  def resolve_integration_head(envelope) do
+    worktree = envelope["worktree"]
+    branch = envelope["branch"]
+    target = get_in(envelope, ["integration", "target"])
+    base_head = get_in(envelope, ["integration", "base_head"])
+
+    cond do
+      not is_binary(worktree) or not File.dir?(worktree) ->
+        {:error, ["worktree does not exist: #{inspect(worktree)}"]}
+
+      not commit_exists?(worktree, base_head) ->
+        {:error, ["integration.base_head #{base_head} does not exist in the worktree"]}
+
+      true ->
+        verify_merge_base(worktree, branch, target, base_head)
+    end
+  end
+
+  defp commit_exists?(worktree, sha) do
+    case System.cmd("git", ["-C", worktree, "cat-file", "-e", sha <> "^{commit}"],
+           stderr_to_stdout: true
+         ) do
+      {_output, 0} -> true
+      {_output, _status} -> false
+    end
+  end
+
+  defp verify_merge_base(worktree, branch, target, base_head) do
+    case System.cmd("git", ["-C", worktree, "merge-base", branch, target],
+           stderr_to_stdout: true
+         ) do
+      {output, 0} ->
+        actual = String.trim(output)
+
+        if actual == base_head do
+          :ok
+        else
+          {:error,
+           [
+             "integration.base_head #{base_head} does not match the merge base of #{branch} and #{target} (#{actual})"
+           ]}
+        end
+
+      {output, _status} ->
+        {:error,
+         ["could not compute the merge base of #{branch} and #{target}: #{String.trim(output)}"]}
+    end
+  end
+
+  @doc """
+  A stable content digest of an envelope, for binding a notify_parent
+  event to the exact coordinator-owned envelope it reports against.
+
+  Elixir/OTP maps with at most 32 keys ("flatmaps") are stored sorted by
+  key term order regardless of insertion order, so two maps with equal
+  content produce byte-identical JSON here without a custom canonical
+  encoder. Every object in this envelope's shape stays under that limit;
+  if a future field pushes any object past 32 keys, this digest would
+  need an explicit canonicalizing encoder to stay order-independent.
+  """
+  @spec digest(map()) :: String.t()
+  def digest(envelope) do
+    hash =
+      envelope
+      |> JSON.encode!()
+      |> then(&:crypto.hash(:sha256, &1))
+      |> Base.encode16(case: :lower)
+
+    "sha256:" <> hash
+  end
 
   @spec validate(term()) :: :ok | {:error, [String.t()]}
   def validate(envelope) when is_map(envelope) do
@@ -66,6 +156,8 @@ defmodule LaneTaskEnvelope do
       |> collect(string_list_errors(envelope, "outputs"))
       |> collect(observable_goal_errors(envelope))
       |> collect(command_list_errors(envelope))
+      |> collect(delegation_allowed_errors(envelope))
+      |> collect(delegation_command_errors(envelope))
       |> collect(deletion_decision_errors(envelope))
       |> collect(string_list_errors(envelope, "stop_conditions"))
       |> collect(protected_action_errors(envelope))
@@ -371,7 +463,10 @@ defmodule LaneTaskEnvelope do
         ["live_smoke is required when affects_runtime is true"]
 
       affects_runtime == true and has_live_smoke ->
-        command_object_errors_with_prefix("live_smoke", Map.get(envelope, "live_smoke"))
+        live_smoke = Map.get(envelope, "live_smoke")
+
+        command_object_errors_with_prefix("live_smoke", live_smoke) ++
+          live_smoke_probe_errors(live_smoke)
 
       affects_runtime != true and has_live_smoke ->
         ["live_smoke must be absent when affects_runtime is false"]
@@ -379,6 +474,28 @@ defmodule LaneTaskEnvelope do
       true ->
         []
     end
+  end
+
+  defp live_smoke_probe_errors(%{"command" => command}) when is_list(command) do
+    cond do
+      command in @trivial_probe_commands ->
+        ["live_smoke.command must be an observable probe, not a no-op like [\"true\"]"]
+
+      match?([_exe | _], command) and non_probe_binary?(hd(command)) ->
+        ["live_smoke.command must be an observable probe, not a unit-test runner"]
+
+      true ->
+        []
+    end
+  end
+
+  defp live_smoke_probe_errors(_live_smoke), do: []
+
+  defp non_probe_binary?(executable) do
+    executable
+    |> Path.basename()
+    |> String.downcase()
+    |> then(&MapSet.member?(@non_probe_binaries, &1))
   end
 
   defp deletion_decision_errors(envelope) do
@@ -511,12 +628,67 @@ defmodule LaneTaskEnvelope do
     ["#{prefix}.command must be an argv list, not a shell string"]
   end
 
-  defp db_lifecycle_command?([executable | _rest]) do
-    executable
+  defp db_lifecycle_command?(command) do
+    Enum.any?(command, &lifecycle_binary?/1) or
+      case unwrap_command(command) do
+        [executable | _rest] -> lifecycle_binary?(executable)
+        [] -> false
+      end
+  end
+
+  defp lifecycle_binary?(token) do
+    token
     |> Path.basename()
     |> String.downcase()
     |> then(&MapSet.member?(@db_lifecycle_binaries, &1))
   end
+
+  # Resolves through env, mise exec --, and shell -c wrappers to find the
+  # command a wrapper would actually execute, so a wrapped invocation cannot
+  # smuggle a manual database lifecycle command past the denylist above.
+  defp unwrap_command([]), do: []
+
+  defp unwrap_command([token | rest]) do
+    base = token |> Path.basename() |> String.downcase()
+
+    cond do
+      base == "env" ->
+        rest
+        |> Enum.drop_while(&env_passthrough_token?/1)
+        |> unwrap_command()
+
+      base == "mise" and List.first(rest) == "exec" ->
+        case Enum.drop_while(tl(rest), &(&1 != "--")) do
+          ["--" | cmd] -> unwrap_command(cmd)
+          [] -> []
+        end
+
+      MapSet.member?(@shell_wrappers, base) and List.first(rest) == "-c" ->
+        case rest do
+          [_c, script | _] -> unwrap_command(String.split(script, " ", trim: true))
+          _ -> []
+        end
+
+      true ->
+        [token | rest]
+    end
+  end
+
+  defp env_passthrough_token?(token) do
+    String.starts_with?(token, "-") or Regex.match?(~r/^[A-Za-z_][A-Za-z0-9_]*=/, token)
+  end
+
+  defp herdr_delegation_command?([executable | rest]) do
+    basename = executable |> Path.basename() |> String.downcase()
+    basename == "herdr" and herdr_delegation_subcommand?(rest)
+  end
+
+  defp herdr_delegation_command?([]), do: false
+
+  defp herdr_delegation_subcommand?(["agent", action | _rest]) when action in ["start", "prompt"],
+    do: true
+
+  defp herdr_delegation_subcommand?(_rest), do: false
 
   defp timeout_errors(prefix, timeout_ms) when is_integer(timeout_ms) do
     if timeout_ms >= 1 and timeout_ms <= 60_000 do
@@ -528,6 +700,67 @@ defmodule LaneTaskEnvelope do
 
   defp timeout_errors(prefix, _timeout_ms) do
     ["#{prefix}.timeout_ms must be an integer from 1 through 60000"]
+  end
+
+  defp delegation_allowed_errors(envelope) do
+    case Map.fetch(envelope, "delegation_allowed") do
+      :error ->
+        ["delegation_allowed is required"]
+
+      {:ok, value} when is_boolean(value) ->
+        if Map.get(envelope, "graph_depth") == 2 and value != false do
+          [
+            "delegation_allowed must be false when graph_depth is 2 (a leaf task must not delegate further)"
+          ]
+        else
+          []
+        end
+
+      {:ok, _value} ->
+        ["delegation_allowed must be a boolean"]
+    end
+  end
+
+  defp delegation_command_errors(envelope) do
+    if Map.get(envelope, "delegation_allowed") == false do
+      envelope
+      |> all_command_entries()
+      |> Enum.flat_map(fn {prefix, command} ->
+        if is_list(command) and herdr_delegation_command?(command) do
+          [
+            "#{prefix}.command must not start or delegate to another herdr agent when delegation_allowed is false"
+          ]
+        else
+          []
+        end
+      end)
+    else
+      []
+    end
+  end
+
+  defp all_command_entries(envelope) do
+    field_entries =
+      Enum.flat_map(@command_fields, fn field ->
+        case Map.get(envelope, field) do
+          list when is_list(list) ->
+            list
+            |> Enum.with_index()
+            |> Enum.filter(fn {command, _index} -> is_map(command) end)
+            |> Enum.map(fn {command, index} -> {"#{field}[#{index}]", Map.get(command, "command")} end)
+
+          _other ->
+            []
+        end
+      end)
+
+    live_smoke_entry =
+      case Map.get(envelope, "live_smoke") do
+        %{"command" => command} -> [{"live_smoke", command}]
+        _other -> []
+      end
+
+    field_entries ++ live_smoke_entry
   end
 
   defp protected_action_errors(envelope) do
@@ -608,13 +841,36 @@ defmodule LaneTaskEnvelope do
     paths =
       writers
       |> Enum.filter(&(is_map(&1) and is_binary(Map.get(&1, "path"))))
-      |> Enum.map(&Map.get(&1, "path"))
+      |> Enum.map(&normalize_writer_path(Map.get(&1, "path")))
 
-    if Enum.uniq(paths) == paths do
-      []
-    else
+    overlapping? =
+      paths
+      |> unique_pairs()
+      |> Enum.any?(fn {a, b} -> paths_overlap?(a, b) end)
+
+    if overlapping? do
       ["writers must not assign more than one owner to the same path"]
+    else
+      []
     end
+  end
+
+  defp normalize_writer_path(path) do
+    path
+    |> String.replace_prefix("./", "")
+    |> String.split("/", trim: true)
+    |> Enum.join("/")
+  end
+
+  defp paths_overlap?(a, b) do
+    a == b or String.starts_with?(b, a <> "/") or String.starts_with?(a, b <> "/")
+  end
+
+  defp unique_pairs(items) do
+    for {a, index_a} <- Enum.with_index(items),
+        {b, index_b} <- Enum.with_index(items),
+        index_a < index_b,
+        do: {a, b}
   end
 
   defp agent_errors(envelope) do
@@ -680,20 +936,25 @@ defmodule LaneTaskEnvelope do
   end
 end
 
-if System.argv() != [] do
-  [path | _rest] = System.argv()
+unless Application.get_env(:lane_task_contract, :cli_suppressed, false) do
+  case System.argv() do
+    [path] ->
+      envelope =
+        path
+        |> File.read!()
+        |> JSON.decode!()
 
-  envelope =
-    path
-    |> File.read!()
-    |> JSON.decode!()
+      case LaneTaskEnvelope.validate(envelope) do
+        :ok ->
+          IO.puts("lane task envelope: valid (#{path})")
 
-  case LaneTaskEnvelope.validate(envelope) do
-    :ok ->
-      IO.puts("lane task envelope: valid (#{path})")
+        {:error, errors} ->
+          Enum.each(errors, fn error -> IO.puts(:stderr, "lane task envelope: #{error}") end)
+          System.halt(1)
+      end
 
-    {:error, errors} ->
-      Enum.each(errors, fn error -> IO.puts(:stderr, "lane task envelope: #{error}") end)
-      System.halt(1)
+    _other ->
+      IO.puts(:stderr, "usage: elixir lane_task_envelope.exs <envelope.json>")
+      System.halt(2)
   end
 end

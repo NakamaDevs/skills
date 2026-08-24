@@ -1,12 +1,15 @@
-notify_parent_argv = System.argv()
 # lane_task_envelope.exs and lane_task_result.exs each auto-run their own
-# CLI when System.argv() is non-empty. Clear argv before requiring them so
-# that this script's own argv never triggers their guards with the wrong
-# shape, then restore it before running this script's own CLI below.
-System.argv([])
+# CLI unless :lane_task_contract's :cli_suppressed application env is set.
+# Suppress it around these requires so this script's own argv never
+# triggers their guards with the wrong shape (this flag lives in the BEAM
+# application environment, not an OS env var, so it never leaks into a
+# System.cmd child process), then restore it before this script's own CLI
+# guard below.
+already_suppressed? = Application.get_env(:lane_task_contract, :cli_suppressed, false)
+Application.put_env(:lane_task_contract, :cli_suppressed, true)
 Code.require_file(Path.join([__DIR__, "lane_task_envelope.exs"]))
 Code.require_file(Path.join([__DIR__, "lane_task_result.exs"]))
-System.argv(notify_parent_argv)
+Application.put_env(:lane_task_contract, :cli_suppressed, already_suppressed?)
 
 defmodule NotifyParent do
   @moduledoc """
@@ -19,7 +22,10 @@ defmodule NotifyParent do
   agent's next turn.
   """
 
-  @event_fields ~w(type issue branch role parent_task status commit result_path)
+  @event_fields ~w(
+    type issue branch role parent_task status commit result_path
+    envelope_digest
+  )
 
   @spec validate(map(), map()) :: :ok | {:error, [String.t()]}
   def validate(task, result) do
@@ -57,11 +63,31 @@ defmodule NotifyParent do
       "parent_task" => task["parent_task"],
       "status" => result["status"],
       "commit" => result["commit"],
-      "result_path" => result["result_path"]
+      "result_path" => result["result_path"],
+      "envelope_digest" => LaneTaskEnvelope.digest(task)
     }
 
     ^event = Map.take(event, @event_fields)
     event
+  end
+
+  @doc """
+  Parent-side check, run before any action on an incoming event: does the
+  event's envelope_digest match the digest of the original envelope this
+  coordinator actually issued? Herdr itself does not perform this check —
+  it only delivers the prompt text — so the coordinator must call this
+  against its own retained original before trusting a result or blocker
+  event, whether the mismatch comes from a modified envelope or an event
+  that actually belongs to a different parent's original envelope.
+  """
+  @spec verify_against_original(map(), map()) :: :ok | {:error, String.t()}
+  def verify_against_original(event, original_envelope) do
+    if event["envelope_digest"] == LaneTaskEnvelope.digest(original_envelope) do
+      :ok
+    else
+      {:error,
+       "the event's envelope_digest does not match this coordinator's original envelope"}
+    end
   end
 
   @spec send!(String.t(), String.t()) :: :ok
@@ -93,6 +119,6 @@ defmodule NotifyParent do
   end
 end
 
-if System.argv() != [] do
+unless Application.get_env(:lane_task_contract, :cli_suppressed, false) do
   NotifyParent.main(System.argv())
 end

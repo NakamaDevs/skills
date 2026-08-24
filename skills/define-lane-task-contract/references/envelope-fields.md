@@ -26,7 +26,8 @@ field is required except `live_smoke`, which is required exactly when
 | --- | --- | --- |
 | `graph_depth` | integer | `0` through `2`. Counts coordinator-to-lane nesting; a lane may not spawn a sub-graph more than two levels deep. |
 | `panes` | integer | `1` through `4`. The maximum number of Herdr panes this lane task may use at once. |
-| `writers` | array of `{"path", "owner"}` | No two entries may share the same `path`. Two owners writing the same path is the failure mode this field exists to catch. |
+| `delegation_allowed` | boolean | Must be `false` when `graph_depth` is `2` — a task at the depth cap is a leaf and cannot delegate further without breaking that cap. When `false`, no command anywhere in the envelope (`red_tests`, `green_commands`, `repository_gates`, `post_integration_tests`, `live_smoke`) may invoke `herdr agent start` or `herdr agent prompt`; see [command-safety.md](command-safety.md#leaf-delegation). |
+| `writers` | array of `{"path", "owner"}` | Paths are normalized (trailing slashes and `./` stripped) before comparison. No two entries may resolve to the same path or to an ancestor/descendant of each other — `skills/foo` and `skills/foo/bar` overlap just as much as two entries both naming `skills/foo`. |
 
 ## Required initial state
 
@@ -56,6 +57,17 @@ current head of `integration.target`, not a head that predates an earlier
 integration. Next work starts from updated trunk, not from a branch that
 forked before the last merge.
 
+`LaneTaskEnvelope.validate/1` only checks the *shape* of `integration`
+above — it never touches the filesystem or runs git, by design (see
+[command-safety.md](command-safety.md)'s note on `validate/1` staying pure).
+Whether `base_head` actually exists and actually equals the merge base of
+`branch` and `target` is a separate, live check:
+`LaneTaskEnvelope.resolve_integration_head/1` resolves `target` and
+`base_head` in the envelope's own declared `worktree` by shelling out to
+`git -C <worktree> cat-file -e` and `git -C <worktree> merge-base`. Run it
+before trusting `integration.base_head` for anything; a passing
+`validate/1` does not prove it.
+
 ## Runtime smoke check
 
 `affects_runtime` (boolean) declares whether this task changes behavior a
@@ -67,6 +79,12 @@ other build-time-only artifacts.
   observes the *running* software, not a unit test double. A red test or
   green command proves code behaves correctly in isolation; `live_smoke`
   proves the deployed or locally running instance actually does the thing.
+  `live_smoke.command` must also be an observable probe, not a stand-in: a
+  trivial no-op (`["true"]`) and a unit-test-runner binary (`elixir`,
+  `mix`, `python`, `pytest`, `npm`, `node`, `cargo`, `go`, `rspec`, `jest`,
+  `ruby`, `bundle`, ...) are both rejected. Use an actual probe —
+  `curl`/`wget` against a running endpoint, a health-check CLI, and the
+  like.
 - When `affects_runtime` is `false`, `live_smoke` must be absent.
 
 ## Feature-to-test inventory
@@ -132,6 +150,15 @@ was deleted (`target`) and the explicit decision covering what replaces it
   [`bootstrap-symphony-workflow`](../../bootstrap-symphony-workflow/references/safe-workflow.md).
   An envelope names every action forbidden to the lane; it does not grant any
   action by omission.
+
+## Binding an envelope to its notifications
+
+`LaneTaskEnvelope.digest/1` computes a stable sha256 digest of the whole
+envelope. It is not a field in the envelope itself; `notify_parent.exs`
+computes it from the task and includes it as `envelope_digest` in every
+event it sends, so the coordinator can verify a result or blocker event was
+built from the exact envelope it issued rather than a modified or
+substituted one. See [notify-parent-protocol.md](notify-parent-protocol.md).
 
 ## Agent and the Claude auto contract
 

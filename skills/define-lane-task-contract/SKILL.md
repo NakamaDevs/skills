@@ -22,6 +22,8 @@ pass after).
   the coordinator expects.
 - The RED tests, GREEN commands, repository gates, and (when the task
   affects a running instance of the software) the `live_smoke` check.
+- Whether this task may delegate to a further sub-agent (`delegation_allowed`);
+  a task at `graph_depth == 2` is a leaf and never may.
 
 Read [envelope-fields.md](references/envelope-fields.md) for the full field
 list, [command-safety.md](references/command-safety.md) for the argv and
@@ -45,7 +47,11 @@ copy its shape rather than inventing a new one.
    ```
 
 4. Fix every reported error and re-run the validator until it prints
-   `valid`.
+   `valid`. This alone does not prove `integration.base_head` is real:
+   separately run `LaneTaskEnvelope.resolve_integration_head/1`, which shells
+   out to `git` in the envelope's declared `worktree` to confirm
+   `base_head` exists and equals the actual merge base of `branch` and
+   `integration.target`.
 5. Run `red_tests` and confirm they fail, then implement, then run
    `green_commands` and confirm they pass. Run `repository_gates` once, at
    handoff — not after every intermediate commit. If `affects_runtime` is
@@ -64,6 +70,12 @@ copy its shape rather than inventing a new one.
 
    [notify-parent-protocol.md](references/notify-parent-protocol.md)
    describes what `notify_parent.exs` sends and why.
+8. Acting as the parent (coordinator) receiving that event: call
+   `NotifyParent.verify_against_original/2` with the event and the
+   coordinator's own retained original envelope before doing anything with
+   it. Herdr delivered the prompt text; it did not verify the event belongs
+   to this task, was not modified, or came from the parent's own lane —
+   this skill's code does that, and only when this step actually runs.
 
 ## Permitted tools
 

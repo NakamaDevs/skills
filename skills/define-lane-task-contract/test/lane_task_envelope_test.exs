@@ -1,5 +1,10 @@
 ExUnit.start()
 
+# lane_task_envelope.exs exits 2 when its own CLI sees zero or surplus
+# operands. Suppress that guard while requiring it as a library; the
+# subprocess tests below start a fresh `elixir` process, so this
+# BEAM-application-env flag never reaches them.
+Application.put_env(:lane_task_contract, :cli_suppressed, true)
 Code.require_file(Path.join([__DIR__, "..", "scripts", "lane_task_envelope.exs"]))
 
 defmodule LaneTaskEnvelopeTest do
@@ -17,6 +22,71 @@ defmodule LaneTaskEnvelopeTest do
 
   test "accepts the shipped example envelope" do
     assert :ok == LaneTaskEnvelope.validate(@valid)
+  end
+
+  describe "the CLI entry point (subprocess)" do
+    @envelope_script Path.join([__DIR__, "..", "scripts", "lane_task_envelope.exs"])
+
+    test "exits 2 with zero operands" do
+      {output, exit_code} = System.cmd("elixir", [@envelope_script], stderr_to_stdout: true)
+      assert exit_code == 2
+      assert output =~ "usage:"
+    end
+
+    test "exits 2 with surplus operands" do
+      {output, exit_code} =
+        System.cmd("elixir", [@envelope_script, @fixture, "extra-operand"],
+          stderr_to_stdout: true
+        )
+
+      assert exit_code == 2
+      assert output =~ "usage:"
+    end
+
+    test "exits 0 and prints valid with exactly one operand" do
+      {output, exit_code} = System.cmd("elixir", [@envelope_script, @fixture], stderr_to_stdout: true)
+      assert exit_code == 0
+      assert output =~ "valid"
+    end
+  end
+
+  describe "resolve_integration_head/1 (live git verification, not part of validate/1)" do
+    test "accepts when integration.base_head matches the real merge base in the declared worktree" do
+      assert :ok == LaneTaskEnvelope.resolve_integration_head(@valid)
+    end
+
+    test "rejects when integration.base_head does not exist in the worktree" do
+      envelope = put_in(@valid, ["integration", "base_head"], String.duplicate("0", 40))
+      assert {:error, [error]} = LaneTaskEnvelope.resolve_integration_head(envelope)
+      assert error =~ "does not exist in the worktree"
+    end
+
+    test "rejects when integration.base_head does not match the actual merge base" do
+      {head, 0} = System.cmd("git", ["rev-parse", "HEAD"])
+
+      envelope = put_in(@valid, ["integration", "base_head"], String.trim(head))
+      assert {:error, [error]} = LaneTaskEnvelope.resolve_integration_head(envelope)
+      assert error =~ "does not match the merge base"
+    end
+
+    test "rejects when the declared worktree does not exist" do
+      envelope = Map.put(@valid, "worktree", "/nonexistent/worktree/path")
+      assert {:error, [error]} = LaneTaskEnvelope.resolve_integration_head(envelope)
+      assert error =~ "worktree does not exist"
+    end
+  end
+
+  describe "digest" do
+    test "is a stable sha256 digest of the envelope content" do
+      digest = LaneTaskEnvelope.digest(@valid)
+      assert String.starts_with?(digest, "sha256:")
+      assert digest == LaneTaskEnvelope.digest(@valid)
+    end
+
+    test "changes when the envelope content changes" do
+      modified = Map.put(@valid, "owner", "someone-else")
+      refute LaneTaskEnvelope.digest(@valid) == LaneTaskEnvelope.digest(modified)
+    end
   end
 
   test "rejects an envelope that is not a map" do
@@ -41,6 +111,7 @@ defmodule LaneTaskEnvelopeTest do
         "notification_state",
         "graph_depth",
         "panes",
+        "delegation_allowed",
         "required_initial_state",
         "integration",
         "affects_runtime",
@@ -151,6 +222,72 @@ defmodule LaneTaskEnvelopeTest do
     assert "panes must be an integer from 1 through 4" in errors(envelope)
   end
 
+  describe "delegation_allowed and leaf commands" do
+    test "must be a boolean" do
+      envelope = Map.put(@valid, "delegation_allowed", "no")
+      assert "delegation_allowed must be a boolean" in errors(envelope)
+    end
+
+    test "must be false when graph_depth is 2 (a leaf task must not delegate further)" do
+      envelope =
+        @valid
+        |> Map.put("graph_depth", 2)
+        |> Map.put("delegation_allowed", true)
+
+      assert "delegation_allowed must be false when graph_depth is 2 (a leaf task must not delegate further)" in errors(
+               envelope
+             )
+    end
+
+    test "permits true when graph_depth is under the cap" do
+      envelope = @valid |> Map.put("graph_depth", 1) |> Map.put("delegation_allowed", true)
+      assert [] == errors(envelope)
+    end
+
+    test "rejects an attempted herdr agent start delegation when delegation_allowed is false" do
+      envelope =
+        @valid
+        |> Map.put("delegation_allowed", false)
+        |> Map.put("green_commands", [
+          %{
+            "command" => ["herdr", "agent", "start", "child", "--kind", "claude", "--pane", "p1"],
+            "timeout_ms" => 5000
+          }
+        ])
+
+      assert "green_commands[0].command must not start or delegate to another herdr agent when delegation_allowed is false" in errors(
+               envelope
+             )
+    end
+
+    test "rejects an attempted herdr agent prompt delegation when delegation_allowed is false" do
+      envelope =
+        @valid
+        |> Map.put("delegation_allowed", false)
+        |> Map.put("green_commands", [
+          %{"command" => ["herdr", "agent", "prompt", "child", "do-work"], "timeout_ms" => 5000}
+        ])
+
+      assert "green_commands[0].command must not start or delegate to another herdr agent when delegation_allowed is false" in errors(
+               envelope
+             )
+    end
+
+    test "permits herdr agent start when delegation_allowed is true" do
+      envelope =
+        @valid
+        |> Map.put("delegation_allowed", true)
+        |> Map.put("green_commands", [
+          %{
+            "command" => ["herdr", "agent", "start", "child", "--kind", "claude", "--pane", "p1"],
+            "timeout_ms" => 5000
+          }
+        ])
+
+      assert [] == errors(envelope)
+    end
+  end
+
   describe "required_initial_state" do
     test "must include branch, clean_worktree, and base_ref" do
       envelope = Map.put(@valid, "required_initial_state", %{})
@@ -255,6 +392,62 @@ defmodule LaneTaskEnvelopeTest do
                  envelope
                )
       end
+
+      test "#{field} rejects a manual database lifecycle command wrapped in env" do
+        envelope =
+          Map.put(@valid, unquote(field), [
+            %{
+              "command" => ["env", "DATABASE_URL=x", "dropdb", "app_dev"],
+              "timeout_ms" => 1000
+            }
+          ])
+
+        assert "#{unquote(field)}[0].command must not run a manual database lifecycle command" in errors(
+                 envelope
+               )
+      end
+
+      test "#{field} rejects a manual database lifecycle command wrapped in mise exec --" do
+        envelope =
+          Map.put(@valid, unquote(field), [
+            %{"command" => ["mise", "exec", "--", "dropdb", "app_dev"], "timeout_ms" => 1000}
+          ])
+
+        assert "#{unquote(field)}[0].command must not run a manual database lifecycle command" in errors(
+                 envelope
+               )
+      end
+
+      test "#{field} rejects a manual database lifecycle command wrapped in sh -c" do
+        envelope =
+          Map.put(@valid, unquote(field), [
+            %{"command" => ["sh", "-c", "dropdb"], "timeout_ms" => 1000}
+          ])
+
+        assert "#{unquote(field)}[0].command must not run a manual database lifecycle command" in errors(
+                 envelope
+               )
+      end
+
+      test "#{field} rejects a manual database lifecycle command wrapped in bash -c" do
+        envelope =
+          Map.put(@valid, unquote(field), [
+            %{"command" => ["bash", "-c", "dropdb"], "timeout_ms" => 1000}
+          ])
+
+        assert "#{unquote(field)}[0].command must not run a manual database lifecycle command" in errors(
+                 envelope
+               )
+      end
+
+      test "#{field} permits an env-wrapped command that is not a database lifecycle command" do
+        envelope =
+          Map.put(@valid, unquote(field), [
+            %{"command" => ["env", "MIX_ENV=test", "mix", "test"], "timeout_ms" => 1000}
+          ])
+
+        refute Enum.any?(errors(envelope), &String.contains?(&1, "database lifecycle"))
+      end
     end
   end
 
@@ -346,6 +539,31 @@ defmodule LaneTaskEnvelopeTest do
       assert [] == errors(envelope)
     end
 
+    test "live_smoke rejects a trivial no-op probe" do
+      envelope =
+        @valid
+        |> Map.put("affects_runtime", true)
+        |> Map.put("live_smoke", %{"command" => ["true"], "timeout_ms" => 1000})
+
+      assert "live_smoke.command must be an observable probe, not a no-op like [\"true\"]" in errors(
+               envelope
+             )
+    end
+
+    test "live_smoke rejects a unit-test runner standing in for a live probe" do
+      envelope =
+        @valid
+        |> Map.put("affects_runtime", true)
+        |> Map.put("live_smoke", %{
+          "command" => ["elixir", "test/lane_task_envelope_test.exs"],
+          "timeout_ms" => 5000
+        })
+
+      assert "live_smoke.command must be an observable probe, not a unit-test runner" in errors(
+               envelope
+             )
+    end
+
     test "live_smoke must be absent when affects_runtime is false" do
       envelope =
         Map.put(@valid, "live_smoke", %{
@@ -418,6 +636,36 @@ defmodule LaneTaskEnvelopeTest do
         ])
 
       assert "writers must not assign more than one owner to the same path" in errors(envelope)
+    end
+
+    test "normalizes a trailing slash before comparing paths" do
+      envelope =
+        Map.put(@valid, "writers", [
+          %{"path" => "skills/define-lane-task-contract/", "owner" => "lane-a"},
+          %{"path" => "skills/define-lane-task-contract", "owner" => "lane-b"}
+        ])
+
+      assert "writers must not assign more than one owner to the same path" in errors(envelope)
+    end
+
+    test "rejects an ancestor-descendant overlap" do
+      envelope =
+        Map.put(@valid, "writers", [
+          %{"path" => "skills/define-lane-task-contract", "owner" => "lane-a"},
+          %{"path" => "skills/define-lane-task-contract/scripts", "owner" => "lane-b"}
+        ])
+
+      assert "writers must not assign more than one owner to the same path" in errors(envelope)
+    end
+
+    test "permits disjoint sibling paths" do
+      envelope =
+        Map.put(@valid, "writers", [
+          %{"path" => "skills/define-lane-task-contract/scripts", "owner" => "lane-a"},
+          %{"path" => "skills/define-lane-task-contract/test", "owner" => "lane-b"}
+        ])
+
+      assert [] == errors(envelope)
     end
   end
 

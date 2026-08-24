@@ -34,7 +34,12 @@ run = [
 ]
 
 [tasks."verify:quick"]
-run = ["mise run governance:test", "mise run catalog:test", "actionlint"]
+run = [
+  "mise run governance:test",
+  "mise run catalog:test",
+  "mise run lane-task-contract:test",
+  "actionlint",
+]
 
 [tasks.verify]
 description = "Run organization and catalog gates"

@@ -10,6 +10,7 @@
   "notification_state": "pending",
   "graph_depth": 1,
   "panes": 1,
+  "delegation_allowed": false,
   "required_initial_state": {
     "branch": "feat/cx/nak-452-enforceable-local-coordinator-agent",
     "clean_worktree": true,
@@ -84,7 +85,7 @@
   ],
   "writers": [
     {
-      "path": "skills/define-lane-task-contract/",
+      "path": "skills/define-lane-task-contract",
       "owner": "lane-nak-452-1"
     }
   ],

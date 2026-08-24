@@ -72,14 +72,12 @@ defmodule LaneTaskResult do
   defp commit_errors(result) do
     case Map.fetch(result, "commit") do
       :error ->
-        ["commit is required"]
+        # Omitting commit entirely is permitted for a red or blocked
+        # result; only a green result must carry the delivering commit.
+        commit_required_error(result)
 
       {:ok, nil} ->
-        if Map.get(result, "status") == "green" do
-          ["commit is required when status is \"green\""]
-        else
-          []
-        end
+        commit_required_error(result)
 
       {:ok, value} when is_binary(value) ->
         if Regex.match?(@sha_pattern, value) do
@@ -90,6 +88,14 @@ defmodule LaneTaskResult do
 
       {:ok, _value} ->
         ["commit must be a full 40-character lowercase commit sha"]
+    end
+  end
+
+  defp commit_required_error(result) do
+    if Map.get(result, "status") == "green" do
+      ["commit is required when status is \"green\""]
+    else
+      []
     end
   end
 
@@ -111,18 +117,23 @@ defmodule LaneTaskResult do
   end
 end
 
-if System.argv() != [] do
-  [result_path, task_path | _rest] = System.argv()
+unless Application.get_env(:lane_task_contract, :cli_suppressed, false) do
+  case System.argv() do
+    [result_path, task_path] ->
+      result = result_path |> File.read!() |> JSON.decode!()
+      task = task_path |> File.read!() |> JSON.decode!()
 
-  result = result_path |> File.read!() |> JSON.decode!()
-  task = task_path |> File.read!() |> JSON.decode!()
+      case LaneTaskResult.validate(result, task) do
+        :ok ->
+          IO.puts("lane task result: valid (#{result_path})")
 
-  case LaneTaskResult.validate(result, task) do
-    :ok ->
-      IO.puts("lane task result: valid (#{result_path})")
+        {:error, errors} ->
+          Enum.each(errors, fn error -> IO.puts(:stderr, "lane task result: #{error}") end)
+          System.halt(1)
+      end
 
-    {:error, errors} ->
-      Enum.each(errors, fn error -> IO.puts(:stderr, "lane task result: #{error}") end)
-      System.halt(1)
+    _other ->
+      IO.puts(:stderr, "usage: elixir lane_task_result.exs <result.json> <task.json>")
+      System.halt(2)
   end
 end

@@ -1,5 +1,10 @@
 ExUnit.start()
 
+# Each of these three scripts exits 2 when its own CLI sees zero or
+# surplus operands. Suppress that guard while requiring them as a
+# library; the subprocess tests below start a fresh `elixir` process, so
+# this BEAM-application-env flag never reaches them.
+Application.put_env(:lane_task_contract, :cli_suppressed, true)
 Code.require_file(Path.join([__DIR__, "..", "scripts", "lane_task_envelope.exs"]))
 Code.require_file(Path.join([__DIR__, "..", "scripts", "lane_task_result.exs"]))
 Code.require_file(Path.join([__DIR__, "..", "scripts", "notify_parent.exs"]))
@@ -46,7 +51,8 @@ defmodule NotifyParentTest do
                "parent_task",
                "status",
                "commit",
-               "result_path"
+               "result_path",
+               "envelope_digest"
              ])
 
     assert event["type"] == "lane_task_result"
@@ -57,6 +63,7 @@ defmodule NotifyParentTest do
     assert event["status"] == @result["status"]
     assert event["commit"] == @result["commit"]
     assert event["result_path"] == @result["result_path"]
+    assert event["envelope_digest"] == LaneTaskEnvelope.digest(@task)
   end
 
   test "build_event sends a blocker event when the result is blocked" do
@@ -103,6 +110,31 @@ defmodule NotifyParentTest do
     assert NotifyParent.parent_target(@task) == @task["parent_agent"]
   end
 
+  describe "verify_against_original/2 (parent-side, before any action)" do
+    test "accepts an event whose envelope_digest matches the coordinator-owned original" do
+      event = NotifyParent.build_event(@task, @result)
+      assert :ok == NotifyParent.verify_against_original(event, @task)
+    end
+
+    test "rejects an event built from a modified envelope" do
+      event = NotifyParent.build_event(@task, @result)
+      tampered_original = Map.put(@task, "owner", "someone-else")
+
+      assert {:error, _reason} = NotifyParent.verify_against_original(event, tampered_original)
+    end
+
+    test "rejects an event that actually belongs to an alternate parent's original envelope" do
+      event = NotifyParent.build_event(@task, @result)
+
+      alternate_original =
+        @task
+        |> Map.put("parent_agent", "some-other-coordinator")
+        |> Map.put("parent_task", "some-other-task")
+
+      assert {:error, _reason} = NotifyParent.verify_against_original(event, alternate_original)
+    end
+  end
+
   test "the module never contacts herdr while building an event or validating" do
     refute function_exported?(NotifyParent, :send!, 3)
     assert function_exported?(NotifyParent, :send!, 2)
@@ -136,6 +168,22 @@ defmodule NotifyParentTest do
       assert exit_code == 1
       refute output =~ "is not a permitted result field"
       assert output =~ "commit is required when status is \"green\""
+    end
+
+    test "exits 2 with zero operands" do
+      {output, exit_code} = System.cmd("elixir", [@notify_parent_script], stderr_to_stdout: true)
+      assert exit_code == 2
+      assert output =~ "usage:"
+    end
+
+    test "exits 2 with surplus operands" do
+      {output, exit_code} =
+        System.cmd("elixir", [@notify_parent_script, @task_fixture, @task_fixture, "extra"],
+          stderr_to_stdout: true
+        )
+
+      assert exit_code == 2
+      assert output =~ "usage:"
     end
   end
 end
