@@ -44,7 +44,20 @@ defmodule LaneTaskEnvelopeTest do
     end
 
     test "exits 0 and prints valid with exactly one operand" do
-      {output, exit_code} = System.cmd("elixir", [@envelope_script, @fixture], stderr_to_stdout: true)
+      # A real envelope pointing at this repository's actual worktree and
+      # branch would make this assertion depend on this repository's live
+      # merge base with main — genuinely different before and after this
+      # branch is integrated (merge-base(branch, main) becomes the
+      # branch's own tip once main contains it), so the exact same test
+      # would start failing the moment integration lands, for no reason
+      # related to the CLI itself. An isolated temporary repository with a
+      # merge base computed fresh, right here, is deterministic regardless
+      # of this repository's own history.
+      repo = init_temp_repo()
+      envelope = temp_repo_envelope(repo, repo.merge_base)
+      path = write_temp_envelope(envelope)
+
+      {output, exit_code} = System.cmd("elixir", [@envelope_script, path], stderr_to_stdout: true)
       assert exit_code == 0
       assert output =~ "valid"
     end
@@ -55,20 +68,23 @@ defmodule LaneTaskEnvelopeTest do
 
     # git! raises with the full output on any non-zero exit, so a broken
     # fixture fails loudly with a diagnosable message instead of a bare
-    # MatchError.
-    defp git!(dir, args) do
-      case System.cmd("git", args, cd: dir, stderr_to_stdout: true) do
+    # MatchError. env is System.cmd's :env option, passed straight
+    # through: absent (the default) it is pure inheritance, identical to
+    # the previous behavior; the hostile-git-config test below is the only
+    # caller that supplies one, and only for that one call chain.
+    defp git!(dir, args, env) do
+      case System.cmd("git", args, cd: dir, env: env, stderr_to_stdout: true) do
         {output, 0} -> output
         {output, status} -> raise "git #{Enum.join(args, " ")} failed (#{status}): #{output}"
       end
     end
 
-    defp git_add_and_commit!(dir, file, message) do
-      git!(dir, ["add", file])
-      git!(dir, ["commit", "-q", "-m", message])
+    defp git_add_and_commit!(dir, file, message, env) do
+      git!(dir, ["add", file], env)
+      git!(dir, ["commit", "-q", "-m", message], env)
     end
 
-    defp init_temp_repo do
+    defp init_temp_repo(env \\ []) do
       dir =
         Path.join(
           System.tmp_dir!(),
@@ -85,26 +101,44 @@ defmodule LaneTaskEnvelopeTest do
       File.mkdir_p!(dir)
       ExUnit.Callbacks.on_exit(fn -> File.rm_rf!(dir) end)
 
-      git!(dir, ["init", "-q"])
-      git!(dir, ["config", "user.email", "test@example.com"])
-      git!(dir, ["config", "user.name", "Test"])
+      git!(dir, ["init", "-q"], env)
+
+      # Hardens every commit this fixture makes against a developer's own
+      # global git configuration — commit.gpgSign (which can prompt or
+      # fail depending on what's configured), core.hooksPath, and any
+      # hook `git init` just copied in from init.templateDir — regardless
+      # of what env does or doesn't override. Local repo config always
+      # wins over global/system config, so this neutralizes all three
+      # vectors even when env is the default (real ambient config) and
+      # not just under the hostile-config test above. An empty,
+      # fixture-owned hooks directory is not merely "no hooks configured"
+      # (which would still fall back to whatever a hostile init.templateDir
+      # copied into .git/hooks/) — core.hooksPath overrides that fallback
+      # outright, so nothing in .git/hooks/ can run either.
+      fixture_hooks_dir = Path.join(dir, ".fixture-empty-hooks")
+      File.mkdir_p!(fixture_hooks_dir)
+      git!(dir, ["config", "commit.gpgSign", "false"], env)
+      git!(dir, ["config", "core.hooksPath", fixture_hooks_dir], env)
+
+      git!(dir, ["config", "user.email", "test@example.com"], env)
+      git!(dir, ["config", "user.name", "Test"], env)
 
       File.write!(Path.join(dir, "seed.txt"), "seed\n")
-      git_add_and_commit!(dir, "seed.txt", "seed")
+      git_add_and_commit!(dir, "seed.txt", "seed", env)
 
-      main_branch = dir |> git!(["branch", "--show-current"]) |> String.trim()
+      main_branch = dir |> git!(["branch", "--show-current"], env) |> String.trim()
       work_branch = "feat/cx/example-work"
 
-      git!(dir, ["checkout", "-q", "-b", work_branch])
+      git!(dir, ["checkout", "-q", "-b", work_branch], env)
       File.write!(Path.join(dir, "work.txt"), "work\n")
-      git_add_and_commit!(dir, "work.txt", "work")
+      git_add_and_commit!(dir, "work.txt", "work", env)
 
-      merge_base = dir |> git!(["merge-base", work_branch, main_branch]) |> String.trim()
+      merge_base = dir |> git!(["merge-base", work_branch, main_branch], env) |> String.trim()
 
-      git!(dir, ["checkout", "-q", main_branch])
+      git!(dir, ["checkout", "-q", main_branch], env)
       File.write!(Path.join(dir, "trunk-advance.txt"), "advance\n")
-      git_add_and_commit!(dir, "trunk-advance.txt", "trunk advances")
-      main_head_after_advance = dir |> git!(["rev-parse", main_branch]) |> String.trim()
+      git_add_and_commit!(dir, "trunk-advance.txt", "trunk advances", env)
+      main_head_after_advance = dir |> git!(["rev-parse", main_branch], env) |> String.trim()
 
       %{
         dir: dir,
@@ -159,23 +193,105 @@ defmodule LaneTaskEnvelopeTest do
     end
   end
 
+  describe "temporary repository commits are isolated from developer git configuration" do
+    # Builds a fake "global" git configuration under a throwaway directory
+    # and returns it as System.cmd :env overrides — GIT_CONFIG_GLOBAL,
+    # GIT_CONFIG_SYSTEM, and HOME are process-scoped to whichever specific
+    # subprocess calls receive this env list. This never writes to, reads
+    # a fallback from, or otherwise touches this machine's real global or
+    # system git configuration (~/.gitconfig, /etc/gitconfig): every path
+    # here lives under a fresh System.tmp_dir!() directory this test owns
+    # and removes on exit.
+    #
+    # The fake global config turns on all three vectors the review named:
+    # commit.gpgSign (forces a signing attempt; gpg.program is pinned to
+    # the real `false` binary so a broken/absent signing setup fails fast
+    # and deterministically instead of ever blocking on an interactive
+    # passphrase prompt), core.hooksPath (a hook that always rejects the
+    # commit), and init.templateDir (a template whose hooks/ directory
+    # `git init` copies into every new repository's .git/hooks/, so even
+    # a repo that never touches core.hooksPath itself inherits a rejecting
+    # hook from template copying alone).
+    defp build_hostile_git_env do
+      fixture_home =
+        Path.join(
+          System.tmp_dir!(),
+          "lane-task-contract-hostile-home-#{System.unique_integer([:positive])}"
+        )
+
+      File.rm_rf!(fixture_home)
+      File.mkdir_p!(fixture_home)
+      ExUnit.Callbacks.on_exit(fn -> File.rm_rf!(fixture_home) end)
+
+      hostile_hooks_dir = Path.join(fixture_home, "hostile-hooks")
+      File.mkdir_p!(hostile_hooks_dir)
+      write_rejecting_hook!(Path.join(hostile_hooks_dir, "pre-commit"))
+
+      hostile_template_dir = Path.join(fixture_home, "hostile-template")
+      hostile_template_hooks_dir = Path.join(hostile_template_dir, "hooks")
+      File.mkdir_p!(hostile_template_hooks_dir)
+      write_rejecting_hook!(Path.join(hostile_template_hooks_dir, "pre-commit"))
+
+      global_config = Path.join(fixture_home, "gitconfig")
+
+      File.write!(global_config, """
+      [commit]
+      \tgpgSign = true
+      [gpg]
+      \tprogram = false
+      [core]
+      \thooksPath = #{hostile_hooks_dir}
+      [init]
+      \ttemplateDir = #{hostile_template_dir}
+      """)
+
+      [
+        {"GIT_CONFIG_GLOBAL", global_config},
+        {"GIT_CONFIG_SYSTEM", "/dev/null"},
+        {"HOME", fixture_home}
+      ]
+    end
+
+    defp write_rejecting_hook!(path) do
+      File.write!(path, "#!/bin/sh\nexit 1\n")
+      File.chmod!(path, 0o755)
+    end
+
+    test "init_temp_repo commits succeed under a hostile global git config (gpgSign, hooksPath, template hooks)" do
+      hostile_env = build_hostile_git_env()
+      repo = init_temp_repo(hostile_env)
+
+      assert File.dir?(repo.dir)
+      assert repo.merge_base =~ ~r/^[0-9a-f]{40}$/
+    end
+  end
+
   describe "resolve_integration_head/1 (live git verification, not part of validate/1)" do
+    # These two use an isolated temporary repository, not this repository's
+    # own worktree/branch: this repository's real merge-base with main
+    # moves the moment this branch is integrated (merge-base(branch, main)
+    # becomes the branch's own tip once main contains it), which would
+    # make a fixture built from @valid's real worktree/branch pass or fail
+    # depending on integration state rather than on what this function
+    # actually does. A fresh repository with a merge base computed right
+    # here stays correct regardless of what happens to this branch.
     test "accepts when integration.base_head matches the real merge base in the declared worktree" do
-      assert :ok == LaneTaskEnvelope.resolve_integration_head(@valid)
+      repo = init_temp_repo()
+      envelope = temp_repo_envelope(repo, repo.merge_base)
+      assert :ok == LaneTaskEnvelope.resolve_integration_head(envelope)
+    end
+
+    test "rejects when integration.base_head does not match the actual merge base" do
+      repo = init_temp_repo()
+      envelope = temp_repo_envelope(repo, repo.main_head_after_advance)
+      assert {:error, [error]} = LaneTaskEnvelope.resolve_integration_head(envelope)
+      assert error =~ "does not match the merge base"
     end
 
     test "rejects when integration.base_head does not exist in the worktree" do
       envelope = put_in(@valid, ["integration", "base_head"], String.duplicate("0", 40))
       assert {:error, [error]} = LaneTaskEnvelope.resolve_integration_head(envelope)
       assert error =~ "does not exist in the worktree"
-    end
-
-    test "rejects when integration.base_head does not match the actual merge base" do
-      {head, 0} = System.cmd("git", ["rev-parse", "HEAD"])
-
-      envelope = put_in(@valid, ["integration", "base_head"], String.trim(head))
-      assert {:error, [error]} = LaneTaskEnvelope.resolve_integration_head(envelope)
-      assert error =~ "does not match the merge base"
     end
 
     test "rejects when the declared worktree does not exist" do
