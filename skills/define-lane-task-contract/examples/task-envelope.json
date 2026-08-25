@@ -94,7 +94,7 @@
     "mode": "auto",
     "model": "claude-sonnet-5",
     "effort": "auto",
-    "routing_reason": "bounded validator change with no measured quality need; Claude auto is the default when no evidence exists",
+    "routing_reason": "bounded validator change with no measured quality need; Sonnet 5 auto uses available Claude capacity",
     "permission_mode": "auto",
     "startup_verification": "visible"
   }

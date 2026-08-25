@@ -33,9 +33,8 @@ timeout rules, and
 Claude or Codex lane also names `agent.model`, `agent.effort`, and
 `agent.routing_reason`; [model-routing.md](references/model-routing.md) is
 the workspace routing policy (supported models, per-model effort
-vocabularies, Claude `auto` — the model's default effort — as the default
-when no measured evidence exists, and the five measurements to record after
-each run). When
+vocabularies, balanced Codex and Claude routes, the default agent graph, and
+the five measurements to record after each run). When
 `agent.kind` is `"codex"` and `agent.mode` is `"auto"`, `agent.command` is
 required and must include `-c check_for_update_on_startup=false` — see
 [command-safety.md](references/command-safety.md#every-codex-startup-command-disables-the-interactive-update-prompt);

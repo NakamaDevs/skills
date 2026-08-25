@@ -45,6 +45,10 @@ valid routes, and neither substitutes for the other.
 | `claude` — `claude-haiku-4-5-20251001` | `not-supported` only |
 | `codex` — every model | `none`, `low`, `medium`, `high`, `xhigh`, `max` |
 
+OpenAI documents `medium` as the API default for all three Codex models. The
+envelope still sets effort explicitly. Use the official name `Luna`, not
+`Lunar`, in model IDs.
+
 Claude effort sets are model-specific. Haiku 4.5 has no effort control; the
 envelope still has to say so explicitly with the sentinel `not-supported`,
 and an ordinary level (`auto`, `low`, ..., `max`) on Haiku is rejected
@@ -76,12 +80,10 @@ it has no `permission_mode` field.
 
 ## Routing rules
 
-1. **Prefer Claude `auto` when no measured evidence exists.** A new lane, or
-   a lane whose task shape has not been measured before, starts as
-   `kind: "claude"` on an effort-supporting model with `effort: "auto"` —
-   that is, the model's default effort (the example envelope uses
-   `claude-sonnet-5`). Do not pre-pay for effort you cannot yet justify. On
-   Haiku, the only value is `not-supported`, so this rule does not apply.
+1. **Keep both providers active.** A new lane does not default to one
+   provider. Use `gpt-5.6-terra` with `medium`, or use `claude-sonnet-5` with
+   `auto`. Select the provider from capacity, required tools, and review
+   diversity. Do not route every lane to Claude or Sol.
 2. **Use an explicit higher effort only for a measured quality need.** Move
    to `high`, `xhigh`, or `max` (either provider) only when a previous run of
    the same task shape recorded a quality shortfall at the lower setting —
@@ -124,6 +126,26 @@ the same time. The next measurement then shows which change helped.
 
 Do not replace a healthy active agent only to change its route. Preserve its
 context unless measured evidence supports replacement.
+
+## Default graph shape
+
+Use this graph when work has independent parts:
+
+1. Use Terra with medium effort for each routine peer coordinator.
+2. Use up to two Luna low-effort agents for bounded discovery.
+3. Use Luna with medium effort for a mechanical writer with exact tests.
+4. Use Terra with medium effort for an ordinary writer.
+5. Use a separate Terra context for exact-head review.
+6. Use Sol with medium effort for a named hard risk.
+
+Do not make Sol the parent of every lane. Keep Sol available for architecture,
+concurrency, security, policy, and hard defects.
+
+Review independence requires a separate context and read-only scope. A
+different provider can add diversity, but it cannot replace separate context.
+
+Escalate one axis at a time. Increase effort for a bounded quality miss. Move
+from Luna to Terra for judgment. Move from Terra to Sol for a hard risk.
 
 ## Record what the route cost
 
