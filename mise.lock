@@ -78,6 +78,19 @@ checksum = "sha256:8ed30b97e41d56e7e21077ac14083dc230dc79c0724a20a19ba05fa8a423c
 url = "https://github.com/erlang/otp/releases/download/OTP-28.4.1/otp_win64_28.4.1.zip"
 url_api = "https://api.github.com/repos/erlang/otp/releases/assets/372569600"
 
+[[tools.erlang]]
+version = "28.4.1"
+backend = "core:erlang"
+
+[tools.erlang.options]
+compile = "true"
+
+[tools.erlang."platforms.linux-x64"]
+checksum = "sha256:fb2aa0bd8d4118a275895d4a0ea5b24e40e9e1e27a7b29e001377d7660fd9ecf"
+url = "https://github.com/erlang/otp/releases/download/OTP-28.4.1/otp_src_28.4.1.tar.gz"
+url_api = "https://api.github.com/repos/erlang/otp/releases/assets/372558021"
+install = "source"
+
 [[tools.gitleaks]]
 version = "8.30.0"
 backend = "aqua:gitleaks/gitleaks"

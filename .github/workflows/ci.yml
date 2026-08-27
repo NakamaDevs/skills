@@ -12,6 +12,7 @@ permissions:
   contents: read
 
 env:
+  MISE_ERLANG_COMPILE: "true"
   MISE_LOCKED: "1"
   MISE_TASK_RUN_AUTO_INSTALL: "false"
 
