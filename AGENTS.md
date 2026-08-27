@@ -9,8 +9,6 @@ People and agents use the same form.
 Do not add a username, initials, tool name, or agent namespace.
 Existing open branches can keep the names that created them.
 
-Do not put real PII or PHI in skills, examples, fixtures, prompts, logs, or
-review text. Use generated synthetic data and reserved domains.
 Follow the [Kaicho privacy policy](https://github.com/NakamaDevs/Kaicho/blob/7cb39adc0e0c21fac943415c66d51b65a231cabd/governance/privacy.md).
 
 Keep each skill in `skills/<name>/`.
