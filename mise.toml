@@ -10,6 +10,7 @@ run_auto_install = false
 [tools]
 actionlint = "1.7.12"
 elixir = "1.19.5-otp-28"
+erlang = "28.4.1"
 gitleaks = "8.30.0"
 prek = "0.4.11"
 python = "3.14.6"
