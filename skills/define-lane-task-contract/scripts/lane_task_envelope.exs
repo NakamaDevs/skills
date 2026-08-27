@@ -30,6 +30,7 @@ defmodule LaneTaskEnvelope do
   @branch_pattern ~r<^(#{Enum.join(@branch_type_prefixes, "|")})/[A-Z]{2,10}-[1-9][0-9]*-[a-z0-9]+(?:-[a-z0-9]+)*$>
   @legacy_branch_pattern ~r<^(#{Enum.join(@branch_type_prefixes, "|")})/(?:cx/[A-Z]{2,10}-[1-9][0-9]*-[a-z0-9]+(?:-[a-z0-9]+)*|[a-z0-9]+(?:-[a-z0-9]+)*-[A-Z]{2,10}-[1-9][0-9]*-[a-z0-9]+(?:-[a-z0-9]+)*)$>
   @branch_error "branch must use <type>/ORG-123-short-description or a valid v1 migration shape"
+  @trusted_policy_revision_env "LANE_TRUSTED_POLICY_REVISION"
   @parent_agent_pattern ~r/^[a-z][a-z0-9_-]{0,31}$/
   @argv_token_pattern ~r{^[A-Za-z0-9_./:=,@-]+$}
   @sha_pattern ~r/^[0-9a-f]{40}$/
@@ -81,67 +82,89 @@ defmodule LaneTaskEnvelope do
   Live git verification that `integration.base_head` exists and matches
   the actual merge base of `branch` and `integration.target`, resolved in
   the declared `worktree`. For a v1 branch shape, this check also reads the
-  exact migration allowlist from `integration.target`. This is deliberately
-  separate from `validate/1`, which stays pure JSON-schema validation with no
-  filesystem or process I/O. `validate/1` alone does NOT prove the envelope's
-  integration or migration claim. Call this before trusting either claim.
+  exact migration allowlist from a trusted revision supplied outside the
+  envelope. This is deliberately separate from `validate/1`, which stays pure
+  JSON-schema validation with no filesystem or process I/O. `validate/1` alone
+  does NOT prove the envelope's integration or migration claim. Call this
+  before trusting either claim.
   """
-  @spec resolve_integration_head(map()) :: :ok | {:error, [String.t()]}
-  def resolve_integration_head(envelope) do
+  @spec resolve_integration_head(map(), keyword()) :: :ok | {:error, [String.t()]}
+  def resolve_integration_head(envelope, options \\ []) do
     worktree = envelope["worktree"]
     branch = envelope["branch"]
     target = get_in(envelope, ["integration", "target"])
     base_head = get_in(envelope, ["integration", "base_head"])
+    trusted_policy_revision = Keyword.get(options, :trusted_policy_revision)
 
     cond do
       not is_binary(worktree) or not File.dir?(worktree) ->
         {:error, ["worktree does not exist: #{inspect(worktree)}"]}
 
-      not branch_allowed_by_target?(worktree, branch, target) ->
-        {:error, ["branch is not allowed by integration.target branch policy"]}
-
-      not commit_exists?(worktree, base_head) ->
-        {:error, ["integration.base_head #{base_head} does not exist in the worktree"]}
-
       true ->
-        verify_merge_base(worktree, branch, target, base_head)
+        with :ok <- branch_allowed_by_policy?(worktree, branch, trusted_policy_revision) do
+          if commit_exists?(worktree, base_head) do
+            verify_merge_base(worktree, branch, target, base_head)
+          else
+            {:error, ["integration.base_head #{base_head} does not exist in the worktree"]}
+          end
+        end
     end
   end
 
-  defp branch_allowed_by_target?(worktree, branch, target) do
+  defp branch_allowed_by_policy?(worktree, branch, trusted_policy_revision) do
     cond do
       Regex.match?(@branch_pattern, branch) ->
-        true
+        :ok
 
       Regex.match?(@legacy_branch_pattern, branch) ->
-        case resolve_target_commit(worktree, target) do
-          {:ok, target_commit} ->
-            target_policy_allows?(worktree, target_commit, branch)
+        case resolve_policy_commit(worktree, trusted_policy_revision) do
+          {:ok, trusted_commit} ->
+            if policy_allows?(worktree, trusted_commit, branch) do
+              :ok
+            else
+              {:error, ["branch is not allowed by the trusted branch policy revision"]}
+            end
 
           :error ->
-            false
+            {:error,
+             ["a v1 branch requires #{@trusted_policy_revision_env} from the coordinator"]}
         end
 
       true ->
-        false
+        {:error, [@branch_error]}
     end
   end
 
-  defp resolve_target_commit(worktree, target) do
-    case System.cmd(
-           "git",
-           ["-C", worktree, "rev-parse", "--verify", "--end-of-options", "#{target}^{commit}"],
-           stderr_to_stdout: true
-         ) do
-      {commit, 0} -> {:ok, String.trim(commit)}
-      {_output, _status} -> :error
+  defp resolve_policy_commit(_worktree, revision) when not is_binary(revision), do: :error
+
+  defp resolve_policy_commit(worktree, revision) do
+    revision = String.trim(revision)
+
+    if revision == "" do
+      :error
+    else
+      case System.cmd(
+             "git",
+             [
+               "-C",
+               worktree,
+               "rev-parse",
+               "--verify",
+               "--end-of-options",
+               "#{revision}^{commit}"
+             ],
+             stderr_to_stdout: true
+           ) do
+        {commit, 0} -> {:ok, String.trim(commit)}
+        {_output, _status} -> :error
+      end
     end
   end
 
-  defp target_policy_allows?(worktree, target_commit, branch) do
+  defp policy_allows?(worktree, policy_commit, branch) do
     case System.cmd(
            "git",
-           ["-C", worktree, "show", "#{target_commit}:.branch-policy"],
+           ["-C", worktree, "show", "#{policy_commit}:.branch-policy"],
            stderr_to_stdout: true
          ) do
       {policy, 0} -> branch in legacy_branch_allowlist(policy)
@@ -1350,8 +1373,13 @@ unless Application.get_env(:lane_task_contract, :cli_suppressed, false) do
         |> File.read!()
         |> JSON.decode!()
 
+      trusted_policy_revision = System.get_env("LANE_TRUSTED_POLICY_REVISION")
+
       with :ok <- LaneTaskEnvelope.validate(envelope),
-           :ok <- LaneTaskEnvelope.resolve_integration_head(envelope),
+           :ok <-
+             LaneTaskEnvelope.resolve_integration_head(envelope,
+               trusted_policy_revision: trusted_policy_revision
+             ),
            :ok <- LaneTaskEnvelope.resolve_writer_paths(envelope) do
         IO.puts("lane task envelope: valid (#{path})")
       else
