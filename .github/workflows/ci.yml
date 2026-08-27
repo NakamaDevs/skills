@@ -12,8 +12,8 @@ permissions:
   contents: read
 
 env:
-  # The self-hosted validation runner does not provide an interactive console.
-  ERL_AFLAGS: "-noinput"
+  # Append this after tool arguments so a later -noshell cannot enable console input.
+  ERL_ZFLAGS: "-noinput"
   # The headless validation job does not use the optional graphical wx application.
   KERL_CONFIGURE_OPTIONS: "--without-wx"
   MISE_ERLANG_COMPILE: "true"
