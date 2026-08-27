@@ -26,10 +26,11 @@ COMMIT_PATTERN = re.compile(rf"^({TYPES})(\([a-z0-9][a-z0-9-]*\))?!?: \S.*$")
 EXACT_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[+-][A-Za-z0-9_.-]+)?$")
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 RUNNER_LABEL = re.compile(
-    r"nakama-(?:dependabot-)?(?:linux-x64|macos-arm64|windows-arm64|windows-x64)"
+    r"nakama-(?:dependabot-)?(?:linux-(?:x64|arm64)|macos-arm64|windows-arm64|windows-x64)"
     r"|nakama-untrusted-metadata-linux-x64"
 )
 PERSISTENT_RUNNERS = {
+    "nakama-linux-arm64",
     "nakama-linux-x64",
     "nakama-macos-arm64",
     "nakama-windows-x64",
@@ -39,6 +40,10 @@ DEPENDABOT_RUNNERS = {
     "nakama-dependabot-macos-arm64",
     "nakama-dependabot-windows-x64",
 }
+PORTABLE_DEPENDABOT_RUNNERS = {
+    "nakama-dependabot-linux-x64",
+    "nakama-dependabot-macos-arm64",
+}
 RETIRED_RUNNERS = {
     "nakama-windows-arm64",
     "nakama-dependabot-windows-arm64",
@@ -47,6 +52,12 @@ WORKLOAD_RUNNERS = {
     "native-macos": {"nakama-macos-arm64"},
     "native-windows": {"nakama-windows-x64"},
     "server-only": {"nakama-linux-x64"},
+    "portable-non-server": {
+        "nakama-linux-arm64",
+        "nakama-linux-x64",
+        "nakama-macos-arm64",
+        "nakama-windows-x64",
+    },
     "cross-platform-desktop": {
         "nakama-linux-x64",
         "nakama-macos-arm64",
@@ -443,7 +454,13 @@ def runner_policy_errors(path: str, text: str) -> list[str]:
             errors.append(f"{location}: unknown workload class {workload!r}.")
         elif persistent:
             expected = WORKLOAD_RUNNERS[workload]
-            if workload == "cross-platform-desktop":
+            if workload == "portable-non-server":
+                if len(persistent) != 1 or not persistent <= expected:
+                    errors.append(
+                        f"{location}: portable non-server jobs require one active "
+                        "persistent capability label."
+                    )
+            elif workload == "cross-platform-desktop":
                 if not persistent <= expected:
                     errors.append(
                         f"{location}: cross-platform desktop jobs may use only "
@@ -517,25 +534,49 @@ def runner_policy_errors(path: str, text: str) -> list[str]:
                 errors.append(
                     f"{location}: persistent PR execution must reject forks before runner assignment."
                 )
-            for label in sorted(persistent):
-                expected = label.replace("nakama-", "nakama-dependabot-", 1)
-                safe_pair = re.compile(
-                    author_selector.pattern
-                    + rf"\s*&&\s*['\"]{re.escape(expected)}['\"]"
-                    + rf"\s*\|\|\s*['\"]{re.escape(label)}['\"]"
-                )
-                if expected not in dependabot or not safe_pair.search(runs_on):
+            if workload == "portable-non-server":
+                persistent_label = next(iter(persistent))
+                if len(dependabot) != 1:
                     errors.append(
-                        f"{location}: route pull_request.user.login == 'dependabot[bot]' "
-                        f"directly to {expected}, then {label}; reversed, mismatched-platform, or "
-                        "configurable fallback is forbidden."
+                        f"{location}: portable non-server PR jobs require one disposable "
+                        "Dependabot capability label."
                     )
-            for label in sorted(dependabot):
-                expected = label.replace("nakama-dependabot-", "nakama-", 1)
-                if expected not in persistent:
-                    errors.append(
-                        f"{location}: {label} must pair with {expected} for non-Dependabot events."
+                else:
+                    dependabot_label = next(iter(dependabot))
+                    safe_pair = re.compile(
+                        author_selector.pattern
+                        + rf"\s*&&\s*['\"]{re.escape(dependabot_label)}['\"]"
+                        + rf"\s*\|\|\s*['\"]{re.escape(persistent_label)}['\"]"
                     )
+                    if (
+                        dependabot_label not in PORTABLE_DEPENDABOT_RUNNERS
+                        or not safe_pair.search(runs_on)
+                    ):
+                        errors.append(
+                            f"{location}: portable non-server PR jobs must route Dependabot "
+                            "to one implemented disposable capability, then the declared "
+                            "persistent capability."
+                        )
+            else:
+                for label in sorted(persistent):
+                    expected = label.replace("nakama-", "nakama-dependabot-", 1)
+                    safe_pair = re.compile(
+                        author_selector.pattern
+                        + rf"\s*&&\s*['\"]{re.escape(expected)}['\"]"
+                        + rf"\s*\|\|\s*['\"]{re.escape(label)}['\"]"
+                    )
+                    if expected not in dependabot or not safe_pair.search(runs_on):
+                        errors.append(
+                            f"{location}: route pull_request.user.login == 'dependabot[bot]' "
+                            f"directly to {expected}, then {label}; reversed, mismatched-platform, or "
+                            "configurable fallback is forbidden."
+                        )
+                for label in sorted(dependabot):
+                    expected = label.replace("nakama-dependabot-", "nakama-", 1)
+                    if expected not in persistent:
+                        errors.append(
+                            f"{location}: {label} must pair with {expected} for non-Dependabot events."
+                        )
     if cross_platform_labels and cross_platform_labels != WORKLOAD_RUNNERS["cross-platform-desktop"]:
         missing = WORKLOAD_RUNNERS["cross-platform-desktop"] - cross_platform_labels
         errors.append(
@@ -718,6 +759,11 @@ jobs:
     safe_server_workflow = safe_runner_workflow.replace(
         "native-windows", "server-only"
     ).replace("windows-x64", "linux-x64")
+    safe_portable_workflow = safe_runner_workflow.replace(
+        "native-windows", "portable-non-server"
+    ).replace(
+        "nakama-dependabot-windows-x64", "nakama-dependabot-macos-arm64"
+    ).replace("nakama-windows-x64", "nakama-linux-arm64")
     safe_metadata_workflow = """on:
   pull_request:
 jobs:
@@ -771,6 +817,13 @@ jobs:
         ),
         safe_macos_workflow.replace("    # nakama-workload: native-macos\n", ""),
         safe_runner_workflow.replace("native-windows", "server-only"),
+        safe_portable_workflow.replace(
+            "nakama-dependabot-macos-arm64", "nakama-dependabot-windows-x64"
+        ),
+        safe_portable_workflow.replace(
+            "'nakama-linux-arm64' }}",
+            "'nakama-linux-arm64' || 'nakama-linux-x64' }}",
+        ),
         safe_runner_workflow.replace("windows-x64", "windows-arm64"),
         safe_cross_platform_workflow.replace(
             "  linux:\n    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}\n"
@@ -811,6 +864,8 @@ jobs:
         fail("Self-test failed: a native macOS lane was rejected.")
     if runner_policy_errors("safe-server.yml", safe_server_workflow):
         fail("Self-test failed: a server-only Linux lane was rejected.")
+    if runner_policy_errors("safe-portable.yml", safe_portable_workflow):
+        fail("Self-test failed: a portable non-server lane was rejected.")
     if runner_policy_errors("safe-metadata.yml", safe_metadata_workflow):
         fail("Self-test failed: a metadata-only disposable lane was rejected.")
     if runner_policy_errors("safe-cross-platform.yml", safe_cross_platform_workflow):
