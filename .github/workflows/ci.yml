@@ -12,11 +12,6 @@ permissions:
   contents: read
 
 env:
-  # Append this after tool arguments so a later -noshell cannot enable console input.
-  ERL_ZFLAGS: "-noinput"
-  # The headless validation job does not use the optional graphical wx application.
-  KERL_CONFIGURE_OPTIONS: "--without-wx"
-  MISE_ERLANG_COMPILE: "true"
   MISE_LOCKED: "1"
   MISE_TASK_RUN_AUTO_INSTALL: "false"
   PR_BASE_REVISION: ${{ github.event.pull_request.base.sha || 'HEAD^1' }}
@@ -31,13 +26,13 @@ jobs:
   verify:
     name: Verify repository
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
-    # nakama-workload: server-only
+    # nakama-workload: portable-non-server
     runs-on: >-
       ${{
         github.event_name == 'pull_request' &&
         github.event.pull_request.user.login == 'dependabot[bot]' &&
-        'nakama-dependabot-linux-x64' ||
-        'nakama-linux-x64'
+        'nakama-dependabot-macos-arm64' ||
+        'nakama-linux-arm64'
       }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

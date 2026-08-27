@@ -4,6 +4,12 @@
 version = "1.7.12"
 backend = "aqua:rhysd/actionlint"
 
+[tools.actionlint."platforms.linux-arm64"]
+checksum = "sha256:325e971b6ba9bfa504672e29be93c24981eeb1c07576d730e9f7c8805afff0c6"
+url = "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/rhysd/actionlint/releases/assets/384924897"
+provenance = "github-attestations"
+
 [tools.actionlint."platforms.linux-x64"]
 checksum = "sha256:8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
 url = "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz"
@@ -32,6 +38,10 @@ provenance = "github-attestations"
 version = "1.19.5-otp-28"
 backend = "core:elixir"
 
+[tools.elixir."platforms.linux-arm64"]
+checksum = "sha256:ca481510feb6dabc875bba43e44b25c7abafa53bd7a103639851b7aeace8a022"
+url = "https://builds.hex.pm/builds/elixir/v1.19.5-otp-28.zip"
+
 [tools.elixir."platforms.linux-x64"]
 checksum = "sha256:ca481510feb6dabc875bba43e44b25c7abafa53bd7a103639851b7aeace8a022"
 url = "https://builds.hex.pm/builds/elixir/v1.19.5-otp-28.zip"
@@ -54,6 +64,10 @@ backend = "core:erlang"
 
 [tools.erlang.options]
 precompiled_os = "ubuntu-24.04"
+
+[tools.erlang."platforms.linux-arm64"]
+checksum = "sha256:ff66082264473acfbcfbba503df40fca08f92fa3aaf7bda1dd40c0b57824ed11"
+url = "https://builds.hex.pm/builds/otp/arm64/ubuntu-24.04/OTP-28.4.1.tar.gz"
 
 [tools.erlang."platforms.linux-x64"]
 checksum = "sha256:1e20880f6b102a50b98999466fc58d35a6042a7d9c821cb8815e2243cf16656f"
@@ -78,22 +92,14 @@ checksum = "sha256:8ed30b97e41d56e7e21077ac14083dc230dc79c0724a20a19ba05fa8a423c
 url = "https://github.com/erlang/otp/releases/download/OTP-28.4.1/otp_win64_28.4.1.zip"
 url_api = "https://api.github.com/repos/erlang/otp/releases/assets/372569600"
 
-[[tools.erlang]]
-version = "28.4.1"
-backend = "core:erlang"
-
-[tools.erlang.options]
-compile = "true"
-
-[tools.erlang."platforms.linux-x64"]
-checksum = "sha256:fb2aa0bd8d4118a275895d4a0ea5b24e40e9e1e27a7b29e001377d7660fd9ecf"
-url = "https://github.com/erlang/otp/releases/download/OTP-28.4.1/otp_src_28.4.1.tar.gz"
-url_api = "https://api.github.com/repos/erlang/otp/releases/assets/372558021"
-install = "source"
-
 [[tools.gitleaks]]
 version = "8.30.0"
 backend = "aqua:gitleaks/gitleaks"
+
+[tools.gitleaks."platforms.linux-arm64"]
+checksum = "sha256:b4cbbb6ddf7d1b2a603088cd03a4e3f7ce48ee7fd449b51f7de6ee2906f5fa2f"
+url = "https://github.com/gitleaks/gitleaks/releases/download/v8.30.0/gitleaks_8.30.0_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/gitleaks/gitleaks/releases/assets/321137500"
 
 [tools.gitleaks."platforms.linux-x64"]
 checksum = "sha256:79a3ab579b53f71efd634f3aaf7e04a0fa0cf206b7ed434638d1547a2470a66e"
@@ -119,10 +125,16 @@ url_api = "https://api.github.com/repos/gitleaks/gitleaks/releases/assets/321137
 version = "0.4.11"
 backend = "aqua:j178/prek"
 
+[tools.prek."platforms.linux-arm64"]
+checksum = "sha256:22edbb9353ca948b8260a904abedc352d0087944170785adab8d1fa1025534e7"
+url = "https://github.com/j178/prek/releases/download/v0.4.11/prek-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/j178/prek/releases/assets/488626441"
+provenance = "github-attestations"
+
 [tools.prek."platforms.linux-x64"]
-checksum = "sha256:fadf7f14fb570cb38051e8651cfe3b3b11ea499207a245c2aff09585cccb776a"
-url = "https://github.com/j178/prek/releases/download/v0.4.11/prek-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/j178/prek/releases/assets/488626498"
+checksum = "sha256:038f67b69c1d1547e920532f975a0ec1a51453b962f1a2d9148abcb252a6d194"
+url = "https://github.com/j178/prek/releases/download/v0.4.11/prek-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/j178/prek/releases/assets/488626496"
 provenance = "github-attestations"
 
 [tools.prek."platforms.macos-arm64"]
@@ -146,6 +158,11 @@ provenance = "github-attestations"
 [[tools.python]]
 version = "3.14.6"
 backend = "core:python"
+
+[tools.python."platforms.linux-arm64"]
+checksum = "sha256:8ad1ec529cd1708245e8661a463245fc1479c43cbfd66e58b095456ebf77180a"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20260804/cpython-3.14.6+20260804-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz"
+provenance = "github-attestations"
 
 [tools.python."platforms.linux-x64"]
 checksum = "sha256:ba960817e542642021135db330d875f410f4e14c64a62e2ae5faf3697ada08b2"
