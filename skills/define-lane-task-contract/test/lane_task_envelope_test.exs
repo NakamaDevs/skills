@@ -309,6 +309,33 @@ defmodule LaneTaskEnvelopeTest do
                )
     end
 
+    test "rejects a symbolic trusted policy revision for a v1 branch" do
+      repo = init_temp_repo()
+      legacy_branch = "feat/cx/NAK-452-example-work"
+      git!(repo.dir, ["branch", "-m", repo.work_branch, legacy_branch], [])
+
+      File.write!(
+        Path.join(repo.dir, ".branch-policy"),
+        "LINEAR_TEAM_KEY=NAK\nLINEAR_PROJECT_NAME=Test\n" <>
+          "LEGACY_BRANCH_ALLOWLIST=#{legacy_branch}\n"
+      )
+
+      git_add_and_commit!(repo.dir, ".branch-policy", "allow migration branch", [])
+
+      envelope =
+        repo
+        |> temp_repo_envelope(repo.merge_base)
+        |> Map.put("branch", legacy_branch)
+        |> put_in(["required_initial_state", "branch"], legacy_branch)
+
+      assert {:error, [error]} =
+               LaneTaskEnvelope.resolve_integration_head(envelope,
+                 trusted_policy_revision: repo.main_branch
+               )
+
+      assert error =~ "full 40-character lowercase commit SHA"
+    end
+
     test "rejects a v1 branch that the integration target does not allowlist" do
       repo = init_temp_repo()
       legacy_branch = "feat/cx/NAK-452-example-work"

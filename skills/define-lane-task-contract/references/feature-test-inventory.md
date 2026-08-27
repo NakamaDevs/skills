@@ -14,7 +14,7 @@ without a listed test is not a real rule. This is the file
 | `role` must be `"lane"` | "role must be lane" |
 | `owner` non-empty | "owner must be a non-empty string" |
 | `issue` matches `ORG-123` | "issue must match an ORG-123 issue key" |
-| `branch` identity-neutral form and bounded v1 migration | "branch must use an issue-first or v1 migration shape", "branch accepts every Conventional Commit type prefix", "branch accepts well-formed v1 shapes for the required live policy check", "branch rejects malformed v1 shapes", "accepts a v1 branch only when the trusted policy revision allowlists it", "rejects a v1 branch that selects its own allowlisting target", "rejects a v1 branch when Git replaces the trusted policy commit" |
+| `branch` identity-neutral form and bounded v1 migration | "branch must use an issue-first or v1 migration shape", "branch accepts every Conventional Commit type prefix", "branch accepts well-formed v1 shapes for the required live policy check", "branch rejects malformed v1 shapes", "accepts a v1 branch only when the trusted policy revision allowlists it", "rejects a symbolic trusted policy revision for a v1 branch", "rejects a v1 branch that selects its own allowlisting target", "rejects a v1 branch when Git replaces the trusted policy commit" |
 | `worktree` absolute path | "worktree must be an absolute path" |
 | `parent_agent` herdr name pattern | "parent_agent must match the herdr agent name pattern" |
 | `result_path` relative, no `..` | "result_path must be relative", "result_path must not traverse out of the worktree" |

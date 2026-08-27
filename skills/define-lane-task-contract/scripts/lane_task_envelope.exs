@@ -127,7 +127,9 @@ defmodule LaneTaskEnvelope do
 
           :error ->
             {:error,
-             ["a v1 branch requires #{@trusted_policy_revision_env} from the coordinator"]}
+             [
+               "a v1 branch requires #{@trusted_policy_revision_env} as a full 40-character lowercase commit SHA from the coordinator"
+             ]}
         end
 
       true ->
@@ -140,7 +142,7 @@ defmodule LaneTaskEnvelope do
   defp resolve_policy_commit(worktree, revision) do
     revision = String.trim(revision)
 
-    if revision == "" do
+    if not Regex.match?(@sha_pattern, revision) do
       :error
     else
       case System.cmd(

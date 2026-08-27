@@ -70,8 +70,10 @@ copy its shape rather than inventing a new one.
    directly from other code, without going through this CLI, does not get
    either check for free; call `resolve_integration_head/2` and
    `resolve_writer_paths/1` explicitly in that case. For a v1 migration
-   branch, the coordinator must also supply the trusted base revision through
-   `LANE_TRUSTED_POLICY_REVISION`. Do not copy this revision from the envelope.
+   branch, the coordinator must also supply the trusted base commit as a full
+   40-character lowercase SHA through `LANE_TRUSTED_POLICY_REVISION`. Do not
+   copy this SHA from the envelope. Do not use a branch name or another
+   symbolic revision.
    The validator disables Git replacement objects for every live Git check.
 5. Run `red_tests` and confirm they fail, then implement, then run
    `green_commands` and confirm they pass. Run `repository_gates` once, at
