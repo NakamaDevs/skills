@@ -39,8 +39,8 @@ jobs:
       - name: Isolate Mise runtime state
         shell: bash
         run: |
-          echo "MISE_DATA_DIR=${RUNNER_TEMP}/mise-data" >> "${GITHUB_ENV}"
-          echo "MISE_CACHE_DIR=${RUNNER_TEMP}/mise-cache" >> "${GITHUB_ENV}"
+          echo "MISE_DATA_DIR=${RUNNER_TEMP}/mise-data-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_ENV}"
+          echo "MISE_CACHE_DIR=${RUNNER_TEMP}/mise-cache-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_ENV}"
       - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           version: 2026.7.17
