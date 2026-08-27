@@ -118,6 +118,7 @@ def read_policy(root: Path) -> dict[str, str]:
 
 def read_policy_at_revision(root: Path, revision: str) -> dict[str, str] | None:
     tree = run_git(
+        "--no-replace-objects",
         "-C",
         str(root),
         "ls-tree",
@@ -133,6 +134,7 @@ def read_policy_at_revision(root: Path, revision: str) -> dict[str, str] | None:
     if tree.stdout.strip() != ".branch-policy":
         return None
     result = run_git(
+        "--no-replace-objects",
         "-C",
         str(root),
         "show",
@@ -699,6 +701,27 @@ def verify_base_policy_lookup() -> None:
             "LINEAR_TEAM_KEY=NAK\nLINEAR_PROJECT_NAME=Test\nPROTECTED_BRANCHES=main\n"
             f"LEGACY_BRANCH_ALLOWLIST={legacy_branch}\n",
             encoding="utf-8",
+        )
+        run_git("-C", directory, "add", ".branch-policy", isolated=True)
+        run_git(
+            "-C",
+            directory,
+            "commit",
+            "-q",
+            "-m",
+            "test: self-allow migration branch",
+            isolated=True,
+        )
+        self_allowing_head = run_git(
+            "-C", directory, "rev-parse", "HEAD", isolated=True
+        ).stdout.strip()
+        run_git(
+            "-C",
+            directory,
+            "replace",
+            base,
+            self_allowing_head,
+            isolated=True,
         )
         trusted_policy = read_policy_at_revision(root, base)
         if trusted_policy is None or legacy_branch in policy_branches(
