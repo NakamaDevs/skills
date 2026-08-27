@@ -127,7 +127,7 @@ defmodule LaneTaskEnvelopeTest do
       git_add_and_commit!(dir, "seed.txt", "seed", env)
 
       main_branch = dir |> git!(["branch", "--show-current"], env) |> String.trim()
-      work_branch = "feat/cx/example-work"
+      work_branch = "feat/NAK-452-example-work"
 
       git!(dir, ["checkout", "-q", "-b", work_branch], env)
       File.write!(Path.join(dir, "work.txt"), "work\n")
@@ -289,7 +289,8 @@ defmodule LaneTaskEnvelopeTest do
     end
 
     test "rejects when integration.base_head does not exist in the worktree" do
-      envelope = put_in(@valid, ["integration", "base_head"], String.duplicate("0", 40))
+      repo = init_temp_repo()
+      envelope = temp_repo_envelope(repo, String.duplicate("0", 40))
       assert {:error, [error]} = LaneTaskEnvelope.resolve_integration_head(envelope)
       assert error =~ "does not exist in the worktree"
     end
@@ -483,17 +484,17 @@ defmodule LaneTaskEnvelopeTest do
     assert "issue must match an ORG-123 issue key format" in errors(envelope)
   end
 
-  test "branch must start with an accepted Conventional Commit type prefix" do
+  test "branch must use the identity-neutral issue-first form" do
     envelope = Map.put(@valid, "branch", "nak-452-no-prefix")
 
-    assert "branch must start with an accepted Conventional Commit type prefix" in errors(
+    assert "branch must use <type>/ORG-123-short-description without an identity segment" in errors(
              envelope
            )
   end
 
   test "branch accepts every Conventional Commit type prefix" do
     for type <- ~w(feature feat fix docs refactor test build ci chore perf style revert) do
-      branch = "#{type}/cx/nak-452-example"
+      branch = "#{type}/NAK-452-example"
 
       envelope =
         @valid
@@ -501,6 +502,16 @@ defmodule LaneTaskEnvelopeTest do
         |> put_in(["required_initial_state", "branch"], branch)
 
       assert [] == errors(envelope), "expected #{type}/ branch prefix to be accepted"
+    end
+  end
+
+  test "branch rejects owner and agent namespace segments" do
+    for branch <- ["feat/user-NAK-452-example", "feat/cx/NAK-452-example"] do
+      envelope = Map.put(@valid, "branch", branch)
+
+      assert "branch must use <type>/ORG-123-short-description without an identity segment" in errors(
+               envelope
+             )
     end
   end
 
@@ -693,7 +704,7 @@ defmodule LaneTaskEnvelopeTest do
     test "branch must match the envelope branch" do
       envelope =
         Map.put(@valid, "required_initial_state", %{
-          "branch" => "feat/cx/nak-000-other",
+          "branch" => "feat/NAK-453-other",
           "clean_worktree" => true,
           "base_ref" => "main"
         })

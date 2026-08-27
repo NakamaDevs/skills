@@ -1,7 +1,7 @@
 schema_version = 1
 repository = "NakamaDevs/skills"
 kind = "single"
-governance_version = "1.7.0"
+governance_version = "2.0.0"
 
 [skills]
 bundle = "NakamaDevs/skills"

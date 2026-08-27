@@ -27,7 +27,8 @@ defmodule LaneTaskEnvelope do
   @branch_type_prefixes ~w(feature feat fix docs refactor test build ci chore perf style revert)
 
   @issue_pattern ~r/^[A-Z]{2,10}-[0-9]+$/
-  @branch_pattern ~r{^(#{Enum.join(@branch_type_prefixes, "|")})/[a-z0-9][a-z0-9/-]*$}
+  @branch_pattern ~r<^(#{Enum.join(@branch_type_prefixes, "|")})/[A-Z]{2,10}-[1-9][0-9]*-[a-z0-9]+(?:-[a-z0-9]+)*$>
+  @branch_error "branch must use <type>/ORG-123-short-description without an identity segment"
   @parent_agent_pattern ~r/^[a-z][a-z0-9_-]{0,31}$/
   @argv_token_pattern ~r{^[A-Za-z0-9_./:=,@-]+$}
   @sha_pattern ~r/^[0-9a-f]{40}$/
@@ -345,7 +346,7 @@ defmodule LaneTaskEnvelope do
     case Map.fetch(envelope, "branch") do
       :error -> ["branch is required"]
       {:ok, value} when is_binary(value) -> branch_pattern_errors(value)
-      {:ok, _value} -> ["branch must start with an accepted Conventional Commit type prefix"]
+      {:ok, _value} -> [@branch_error]
     end
   end
 
@@ -353,7 +354,7 @@ defmodule LaneTaskEnvelope do
     if Regex.match?(@branch_pattern, value) do
       []
     else
-      ["branch must start with an accepted Conventional Commit type prefix"]
+      [@branch_error]
     end
   end
 

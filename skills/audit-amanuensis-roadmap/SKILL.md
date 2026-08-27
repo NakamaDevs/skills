@@ -9,7 +9,7 @@ Verify roadmap claims from evidence in the current default branch. Treat a check
 
 ## Prepare
 
-1. Read `AGENTS.md`, `.governance/engineering-v1.md`, and `docs/ROADMAP.md`.
+1. Read `AGENTS.md`, `.governance/engineering-v2.md`, `.governance/privacy.md`, and `docs/ROADMAP.md`.
 2. Confirm the default branch is current. Preserve unrelated work by using an isolated worktree when necessary.
 3. Run `python .agents/skills/audit-amanuensis-roadmap/scripts/roadmap_inventory.py docs/ROADMAP.md` to inventory every checkbox and its line number.
 4. Find the most recent roadmap change with `git log -1 --format=%H -- docs/ROADMAP.md`, then inspect product and infrastructure changes after it.

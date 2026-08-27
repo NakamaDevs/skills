@@ -17,7 +17,7 @@ import urllib.request
 from pathlib import Path
 from typing import NoReturn
 
-CLI_VERSION = "1.2.0"
+CLI_VERSION = "2.0.0"
 TYPES = "feat|fix|docs|refactor|test|build|ci|chore|perf|style|revert"
 # Branch prefixes accept every commit type. "feature" stays as a legacy alias and
 # must precede "feat" so the longer prefix matches first.
@@ -94,9 +94,8 @@ def validate_branch_format(branch: str, policy: dict[str, str]) -> str | None:
     if branch in protected:
         return None
     team = re.escape(policy["LINEAR_TEAM_KEY"])
-    human = rf"^(?:{BRANCH_TYPES})/[a-z0-9]+(?:-[a-z0-9]+)*-{team}-[1-9][0-9]*-[a-z0-9]+(?:-[a-z0-9]+)*$"
-    agent = rf"^(?:{BRANCH_TYPES})/cx/{team}-[1-9][0-9]*-[a-z0-9]+(?:-[a-z0-9]+)*$"
-    if re.fullmatch(rf"(?:{human})|(?:{agent})", branch):
+    branch_pattern = rf"^(?:{BRANCH_TYPES})/{team}-[1-9][0-9]*-[a-z0-9]+(?:-[a-z0-9]+)*$"
+    if re.fullmatch(branch_pattern, branch):
         return None
     return f"Invalid branch name: {branch}"
 
@@ -147,7 +146,7 @@ def command_branch(args: argparse.Namespace) -> None:
         team = policy["LINEAR_TEAM_KEY"]
         print(error, file=sys.stderr)
         print(
-            f"Use <type>/username-{team}-123-description or <type>/cx/{team}-123-description.",
+            f"Use <type>/{team}-123-description without an identity segment.",
             f"Types: {BRANCH_TYPES.replace('|', ', ')}.",
             file=sys.stderr,
         )
@@ -561,23 +560,24 @@ def command_supply_chain(_: argparse.Namespace) -> None:
 def command_self_test(_: argparse.Namespace) -> None:
     policy = read_policy(repository_root())
     passing = (
-        "feature/hectorddmx-NAK-5-branch-governance",
-        "fix/hector-dd-NAK-5-branch-governance",
-        "feature/cx/NAK-5-branch-governance",
-        "fix/cx/NAK-5-branch-governance",
-        "feat/cx/NAK-5-branch-governance",
-        "docs/cx/NAK-5-branch-governance",
-        "chore/hectorddmx-NAK-5-branch-governance",
-        "revert/cx/NAK-5-branch-governance",
+        "feature/NAK-5-branch-governance",
+        "fix/NAK-5-branch-governance",
+        "feat/NAK-5-branch-governance",
+        "docs/NAK-5-branch-governance",
+        "chore/NAK-5-branch-governance",
+        "revert/NAK-5-branch-governance",
         "main",
     )
     failing = (
-        "feature/NAK-5-branch-governance",
-        "fix/cx/hectorddmx-NAK-5-branch-governance",
-        "feature/cx/missing-ticket",
-        "chores/hectorddmx-NAK-5-branch-governance",
-        "release/cx/NAK-5-branch-governance",
-        "fix/cx/nak-5-branch-governance",
+        "feature/user-NAK-5-branch-governance",
+        "fix/user-name-NAK-5-branch-governance",
+        "feature/cx/NAK-5-branch-governance",
+        "fix/cx/NAK-5-branch-governance",
+        "fix/cx/user-NAK-5-branch-governance",
+        "feature/missing-ticket",
+        "chores/NAK-5-branch-governance",
+        "release/NAK-5-branch-governance",
+        "fix/nak-5-branch-governance",
     )
     if any(validate_branch_format(value, policy) for value in passing):
         fail("Self-test failed: a valid branch was rejected.")

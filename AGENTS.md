@@ -4,6 +4,15 @@ This repository contains reusable Agent Skills for NakamaDevs.
 Kaicho contains organization policy.
 Do not copy policy into this repository.
 
+Use `<type>/NAK-123-short-description` for every new branch.
+People and agents use the same form.
+Do not add a username, initials, tool name, or agent namespace.
+Existing open branches can keep the names that created them.
+
+Do not put real PII or PHI in skills, examples, fixtures, prompts, logs, or
+review text. Use generated synthetic data and reserved domains.
+Follow the [Kaicho privacy policy](https://github.com/NakamaDevs/Kaicho/blob/5fbb5290061e3aa78ebb9079f638737e2d783845/governance/privacy.md).
+
 Keep each skill in `skills/<name>/`.
 Each skill must contain `SKILL.md` with `name` and `description` frontmatter.
 Use kebab-case skill names.

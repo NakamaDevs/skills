@@ -26,7 +26,7 @@ one prompt.
 {
   "type": "lane_task_result",
   "issue": "NAK-452",
-  "branch": "feat/cx/nak-452-enforceable-local-coordinator-agent",
+  "branch": "feat/NAK-452-enforceable-local-coordinator-agent",
   "role": "lane",
   "parent_task": "kantoku-m0-proven-loop",
   "status": "green",
