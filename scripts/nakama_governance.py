@@ -44,6 +44,7 @@ PORTABLE_DEPENDABOT_RUNNERS = {
     "nakama-dependabot-linux-x64",
     "nakama-dependabot-macos-arm64",
 }
+UNAVAILABLE_RUNNERS = {"nakama-dependabot-linux-arm64"}
 RETIRED_RUNNERS = {
     "nakama-windows-arm64",
     "nakama-dependabot-windows-arm64",
@@ -442,13 +443,29 @@ def runner_policy_errors(path: str, text: str) -> list[str]:
                 f"{location}: retired Windows ARM64 runner labels are forbidden: "
                 f"{', '.join(sorted(retired))}; active Windows CI uses x64 only."
             )
+        unavailable = labels & UNAVAILABLE_RUNNERS
+        if unavailable:
+            errors.append(
+                f"{location}: unavailable runner labels are forbidden: "
+                f"{', '.join(sorted(unavailable))}."
+            )
         workload_matches = re.findall(r"#\s*nakama-workload:\s*([a-z0-9-]+)", block)
         workload = workload_matches[0] if len(workload_matches) == 1 else ""
 
-        if persistent and len(workload_matches) != 1:
+        if len(workload_matches) > 1:
+            errors.append(
+                f"{location}: execution requires at most one "
+                "'# nakama-workload: <class>' declaration."
+            )
+        elif persistent and not workload:
             errors.append(
                 f"{location}: persistent execution requires exactly one "
                 "'# nakama-workload: <class>' declaration."
+            )
+        elif not persistent and workload in WORKLOAD_RUNNERS:
+            errors.append(
+                f"{location}: workload {workload} requires an approved "
+                "persistent capability label."
             )
         elif persistent and workload not in WORKLOAD_RUNNERS:
             errors.append(f"{location}: unknown workload class {workload!r}.")
@@ -819,6 +836,12 @@ jobs:
         safe_runner_workflow.replace("native-windows", "server-only"),
         safe_portable_workflow.replace(
             "nakama-dependabot-macos-arm64", "nakama-dependabot-windows-x64"
+        ),
+        safe_portable_workflow.replace(
+            "nakama-dependabot-macos-arm64", "nakama-dependabot-linux-arm64"
+        ),
+        safe_portable_workflow.replace(
+            "'nakama-linux-arm64' }}", "'ubuntu-latest' }}"
         ),
         safe_portable_workflow.replace(
             "'nakama-linux-arm64' }}",
