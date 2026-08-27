@@ -14,7 +14,7 @@ without a listed test is not a real rule. This is the file
 | `role` must be `"lane"` | "role must be lane" |
 | `owner` non-empty | "owner must be a non-empty string" |
 | `issue` matches `ORG-123` | "issue must match an ORG-123 issue key" |
-| `branch` identity-neutral issue-first form | "branch must use the identity-neutral issue-first form", "branch accepts every Conventional Commit type prefix", "branch rejects owner and agent namespace segments" |
+| `branch` identity-neutral form and bounded v1 migration | "branch must use an issue-first or v1 migration shape", "branch accepts every Conventional Commit type prefix", "branch accepts well-formed v1 shapes for the required live policy check", "branch rejects malformed v1 shapes", "accepts a v1 branch only when the integration target allowlists it", "rejects a v1 branch that the integration target does not allowlist" |
 | `worktree` absolute path | "worktree must be an absolute path" |
 | `parent_agent` herdr name pattern | "parent_agent must match the herdr agent name pattern" |
 | `result_path` relative, no `..` | "result_path must be relative", "result_path must not traverse out of the worktree" |

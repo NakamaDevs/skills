@@ -281,6 +281,50 @@ defmodule LaneTaskEnvelopeTest do
       assert :ok == LaneTaskEnvelope.resolve_integration_head(envelope)
     end
 
+    test "accepts a v1 branch only when the integration target allowlists it" do
+      repo = init_temp_repo()
+      legacy_branch = "feat/cx/NAK-452-example-work"
+      git!(repo.dir, ["branch", "-m", repo.work_branch, legacy_branch], [])
+
+      File.write!(
+        Path.join(repo.dir, ".branch-policy"),
+        "LINEAR_TEAM_KEY=NAK\nLINEAR_PROJECT_NAME=Test\n" <>
+          "LEGACY_BRANCH_ALLOWLIST=#{legacy_branch}\n"
+      )
+
+      git_add_and_commit!(repo.dir, ".branch-policy", "allow migration branch", [])
+
+      envelope =
+        repo
+        |> temp_repo_envelope(repo.merge_base)
+        |> Map.put("branch", legacy_branch)
+        |> put_in(["required_initial_state", "branch"], legacy_branch)
+
+      assert :ok == LaneTaskEnvelope.resolve_integration_head(envelope)
+    end
+
+    test "rejects a v1 branch that the integration target does not allowlist" do
+      repo = init_temp_repo()
+      legacy_branch = "feat/cx/NAK-452-example-work"
+      git!(repo.dir, ["branch", "-m", repo.work_branch, legacy_branch], [])
+
+      File.write!(
+        Path.join(repo.dir, ".branch-policy"),
+        "LINEAR_TEAM_KEY=NAK\nLINEAR_PROJECT_NAME=Test\nLEGACY_BRANCH_ALLOWLIST=\n"
+      )
+
+      git_add_and_commit!(repo.dir, ".branch-policy", "deny migration branch", [])
+
+      envelope =
+        repo
+        |> temp_repo_envelope(repo.merge_base)
+        |> Map.put("branch", legacy_branch)
+        |> put_in(["required_initial_state", "branch"], legacy_branch)
+
+      assert {:error, ["branch is not allowed by integration.target branch policy"]} ==
+               LaneTaskEnvelope.resolve_integration_head(envelope)
+    end
+
     test "rejects when integration.base_head does not match the actual merge base" do
       repo = init_temp_repo()
       envelope = temp_repo_envelope(repo, repo.main_head_after_advance)
@@ -484,10 +528,10 @@ defmodule LaneTaskEnvelopeTest do
     assert "issue must match an ORG-123 issue key format" in errors(envelope)
   end
 
-  test "branch must use the identity-neutral issue-first form" do
+  test "branch must use an issue-first or v1 migration shape" do
     envelope = Map.put(@valid, "branch", "nak-452-no-prefix")
 
-    assert "branch must use <type>/ORG-123-short-description without an identity segment" in errors(
+    assert "branch must use <type>/ORG-123-short-description or a valid v1 migration shape" in errors(
              envelope
            )
   end
@@ -505,11 +549,22 @@ defmodule LaneTaskEnvelopeTest do
     end
   end
 
-  test "branch rejects owner and agent namespace segments" do
+  test "branch accepts well-formed v1 shapes for the required live policy check" do
     for branch <- ["feat/user-NAK-452-example", "feat/cx/NAK-452-example"] do
+      envelope =
+        @valid
+        |> Map.put("branch", branch)
+        |> put_in(["required_initial_state", "branch"], branch)
+
+      assert [] == errors(envelope)
+    end
+  end
+
+  test "branch rejects malformed v1 shapes" do
+    for branch <- ["feat/cx/user-NAK-452-example", "feat/User-NAK-452-example"] do
       envelope = Map.put(@valid, "branch", branch)
 
-      assert "branch must use <type>/ORG-123-short-description without an identity segment" in errors(
+      assert "branch must use <type>/ORG-123-short-description or a valid v1 migration shape" in errors(
                envelope
              )
     end
@@ -546,9 +601,7 @@ defmodule LaneTaskEnvelopeTest do
   test "notification_state must be a known state" do
     envelope = Map.put(@valid, "notification_state", "sent-ish")
 
-    assert "notification_state must be one of: pending, sent, acknowledged" in errors(
-             envelope
-           )
+    assert "notification_state must be one of: pending, sent, acknowledged" in errors(envelope)
   end
 
   test "graph_depth must be an integer from 0 through 2" do
@@ -668,7 +721,10 @@ defmodule LaneTaskEnvelopeTest do
         @valid
         |> Map.put("delegation_allowed", false)
         |> Map.put("green_commands", [
-          %{"command" => ["/usr/local/bin/herdr", "agent", "start", "child"], "timeout_ms" => 5000}
+          %{
+            "command" => ["/usr/local/bin/herdr", "agent", "start", "child"],
+            "timeout_ms" => 5000
+          }
         ])
 
       assert "green_commands[0].command must not start or delegate to another herdr agent when delegation_allowed is false" in errors(
@@ -682,7 +738,16 @@ defmodule LaneTaskEnvelopeTest do
         |> Map.put("delegation_allowed", false)
         |> Map.put("green_commands", [
           %{
-            "command" => ["mise", "exec", "--", "/usr/local/bin/herdr", "agent", "prompt", "child", "go"],
+            "command" => [
+              "mise",
+              "exec",
+              "--",
+              "/usr/local/bin/herdr",
+              "agent",
+              "prompt",
+              "child",
+              "go"
+            ],
             "timeout_ms" => 5000
           }
         ])
@@ -749,9 +814,7 @@ defmodule LaneTaskEnvelopeTest do
       test "#{field} must be a non-empty list" do
         envelope = Map.put(@valid, unquote(field), [])
 
-        assert "#{unquote(field)} must be a non-empty list of command objects" in errors(
-                 envelope
-               )
+        assert "#{unquote(field)} must be a non-empty list of command objects" in errors(envelope)
       end
 
       test "#{field} rejects a shell string instead of an argv list" do
@@ -949,7 +1012,8 @@ defmodule LaneTaskEnvelopeTest do
     not_permitted_message = "live_smoke.command is not a permitted field"
 
     for {label, command} <- [
-          {"a plain, previously allow-listed probe name", ["curl", "http://localhost:4000/health"]},
+          {"a plain, previously allow-listed probe name",
+           ["curl", "http://localhost:4000/health"]},
           {"a relative path", ["./tools/curl", "http://localhost:4000/health"]},
           {"an untrusted absolute path", ["/tmp/curl", "http://localhost:4000/health"]},
           {"a PATH override wrapped in env",
@@ -1032,6 +1096,7 @@ defmodule LaneTaskEnvelopeTest do
 
     test "must reject deletion_decisions that is not a list" do
       envelope = Map.put(@valid, "deletion_decisions", "none")
+
       assert "deletion_decisions must be a list of {target, replacement_decision} objects" in errors(
                envelope
              )
@@ -1189,7 +1254,13 @@ defmodule LaneTaskEnvelopeTest do
         |> put_in(["agent", "mode"], "supervised")
         |> Map.update!(
           "agent",
-          &Map.drop(&1, ["model", "permission_mode", "startup_verification", "effort", "routing_reason"])
+          &Map.drop(&1, [
+            "model",
+            "permission_mode",
+            "startup_verification",
+            "effort",
+            "routing_reason"
+          ])
         )
 
       assert [] == errors(envelope)
@@ -1200,12 +1271,18 @@ defmodule LaneTaskEnvelopeTest do
     # effort, and why. See references/model-routing.md.
     test "a claude auto contract requires an effort" do
       envelope = Map.update!(@valid, "agent", &Map.delete(&1, "effort"))
-      assert "agent.effort must be one of auto, low, medium, high, xhigh, max for a Claude agent" in errors(envelope)
+
+      assert "agent.effort must be one of auto, low, medium, high, xhigh, max for a Claude agent" in errors(
+               envelope
+             )
     end
 
     test "a claude auto contract rejects the Codex-only effort none" do
       envelope = put_in(@valid, ["agent", "effort"], "none")
-      assert "agent.effort must be one of auto, low, medium, high, xhigh, max for a Claude agent" in errors(envelope)
+
+      assert "agent.effort must be one of auto, low, medium, high, xhigh, max for a Claude agent" in errors(
+               envelope
+             )
     end
 
     for effort <- ~w(auto low medium high xhigh max) do
@@ -1217,12 +1294,18 @@ defmodule LaneTaskEnvelopeTest do
 
     test "a claude auto contract requires a routing_reason" do
       envelope = Map.update!(@valid, "agent", &Map.delete(&1, "routing_reason"))
-      assert "agent.routing_reason must be a non-empty string after trimming whitespace" in errors(envelope)
+
+      assert "agent.routing_reason must be a non-empty string after trimming whitespace" in errors(
+               envelope
+             )
     end
 
     test "a claude auto contract rejects an empty routing_reason" do
       envelope = put_in(@valid, ["agent", "routing_reason"], "")
-      assert "agent.routing_reason must be a non-empty string after trimming whitespace" in errors(envelope)
+
+      assert "agent.routing_reason must be a non-empty string after trimming whitespace" in errors(
+               envelope
+             )
     end
 
     for {model, effort} <- [
@@ -1275,17 +1358,24 @@ defmodule LaneTaskEnvelopeTest do
           |> put_in(["agent", "model"], unquote(model))
           |> put_in(["agent", "effort"], "not-supported")
 
-        assert "agent.effort must be one of auto, low, medium, high, xhigh, max for a Claude agent" in errors(envelope)
+        assert "agent.effort must be one of auto, low, medium, high, xhigh, max for a Claude agent" in errors(
+                 envelope
+               )
       end
     end
 
     test "a claude auto contract rejects a whitespace-only routing_reason" do
       envelope = put_in(@valid, ["agent", "routing_reason"], " \t\n ")
-      assert "agent.routing_reason must be a non-empty string after trimming whitespace" in errors(envelope)
+
+      assert "agent.routing_reason must be a non-empty string after trimming whitespace" in errors(
+               envelope
+             )
     end
 
     test "a claude auto contract accepts a routing_reason with surrounding whitespace" do
-      envelope = put_in(@valid, ["agent", "routing_reason"], "  measured rework on this task shape  ")
+      envelope =
+        put_in(@valid, ["agent", "routing_reason"], "  measured rework on this task shape  ")
+
       assert [] == errors(envelope)
     end
 
@@ -1322,7 +1412,10 @@ defmodule LaneTaskEnvelopeTest do
 
     test "an automated codex role template requires an effort" do
       envelope = Map.put(@valid, "agent", Map.delete(@codex_auto, "effort"))
-      assert "agent.effort must be one of none, low, medium, high, xhigh, max for a Codex agent" in errors(envelope)
+
+      assert "agent.effort must be one of none, low, medium, high, xhigh, max for a Codex agent" in errors(
+               envelope
+             )
     end
 
     test "an automated codex role template rejects the Haiku-only sentinel not-supported" do
@@ -1331,12 +1424,18 @@ defmodule LaneTaskEnvelopeTest do
       # lane is a false statement and must be rejected like any other value
       # outside the Codex set.
       envelope = Map.put(@valid, "agent", Map.put(@codex_auto, "effort", "not-supported"))
-      assert "agent.effort must be one of none, low, medium, high, xhigh, max for a Codex agent" in errors(envelope)
+
+      assert "agent.effort must be one of none, low, medium, high, xhigh, max for a Codex agent" in errors(
+               envelope
+             )
     end
 
     test "an automated codex role template rejects the Claude-only effort auto" do
       envelope = Map.put(@valid, "agent", Map.put(@codex_auto, "effort", "auto"))
-      assert "agent.effort must be one of none, low, medium, high, xhigh, max for a Codex agent" in errors(envelope)
+
+      assert "agent.effort must be one of none, low, medium, high, xhigh, max for a Codex agent" in errors(
+               envelope
+             )
     end
 
     for effort <- ~w(none low medium high xhigh max) do
@@ -1348,12 +1447,18 @@ defmodule LaneTaskEnvelopeTest do
 
     test "an automated codex role template requires a routing_reason" do
       envelope = Map.put(@valid, "agent", Map.delete(@codex_auto, "routing_reason"))
-      assert "agent.routing_reason must be a non-empty string after trimming whitespace" in errors(envelope)
+
+      assert "agent.routing_reason must be a non-empty string after trimming whitespace" in errors(
+               envelope
+             )
     end
 
     test "an automated codex role template rejects a whitespace-only routing_reason" do
       envelope = Map.put(@valid, "agent", Map.put(@codex_auto, "routing_reason", "   "))
-      assert "agent.routing_reason must be a non-empty string after trimming whitespace" in errors(envelope)
+
+      assert "agent.routing_reason must be a non-empty string after trimming whitespace" in errors(
+               envelope
+             )
     end
 
     test "a non-auto codex agent does not require model, effort, or routing_reason" do
@@ -1435,7 +1540,12 @@ defmodule LaneTaskEnvelopeTest do
           "model" => "gpt-5.6-luna",
           "effort" => "low",
           "routing_reason" => "efficient high-volume fixture for a startup-command test",
-          "command" => ["/usr/local/bin/codex", "app-server", "-c", "check_for_update_on_startup=false"]
+          "command" => [
+            "/usr/local/bin/codex",
+            "app-server",
+            "-c",
+            "check_for_update_on_startup=false"
+          ]
         })
 
       assert [] == errors(envelope)
@@ -1534,16 +1644,40 @@ defmodule LaneTaskEnvelopeTest do
     # was not scanned by the leaf-delegation check that applies to every
     # other command field.
     for {label, command} <- [
-          {"bare", ["herdr", "agent", "start", "child", "-c", "check_for_update_on_startup=false"]},
+          {"bare",
+           ["herdr", "agent", "start", "child", "-c", "check_for_update_on_startup=false"]},
           {"path-qualified",
-           ["/usr/local/bin/herdr", "agent", "start", "child", "-c",
-            "check_for_update_on_startup=false"]},
+           [
+             "/usr/local/bin/herdr",
+             "agent",
+             "start",
+             "child",
+             "-c",
+             "check_for_update_on_startup=false"
+           ]},
           {"wrapped in env",
-           ["env", "FOO=bar", "herdr", "agent", "start", "child", "-c",
-            "check_for_update_on_startup=false"]},
+           [
+             "env",
+             "FOO=bar",
+             "herdr",
+             "agent",
+             "start",
+             "child",
+             "-c",
+             "check_for_update_on_startup=false"
+           ]},
           {"wrapped in mise exec --",
-           ["mise", "exec", "--", "herdr", "agent", "start", "child", "-c",
-            "check_for_update_on_startup=false"]}
+           [
+             "mise",
+             "exec",
+             "--",
+             "herdr",
+             "agent",
+             "start",
+             "child",
+             "-c",
+             "check_for_update_on_startup=false"
+           ]}
         ] do
       test "an automated codex role template rejects agent.command that starts a different executable (#{label})" do
         envelope =
@@ -1564,7 +1698,14 @@ defmodule LaneTaskEnvelopeTest do
         |> Map.put("agent", %{
           "kind" => "codex",
           "mode" => "auto",
-          "command" => ["herdr", "agent", "start", "child", "-c", "check_for_update_on_startup=false"]
+          "command" => [
+            "herdr",
+            "agent",
+            "start",
+            "child",
+            "-c",
+            "check_for_update_on_startup=false"
+          ]
         })
 
       assert "agent.command must not start or delegate to another herdr agent when delegation_allowed is false" in errors(
@@ -1582,7 +1723,14 @@ defmodule LaneTaskEnvelopeTest do
         |> Map.put("agent", %{
           "kind" => "codex",
           "mode" => "auto",
-          "command" => ["herdr", "agent", "start", "child", "-c", "check_for_update_on_startup=false"]
+          "command" => [
+            "herdr",
+            "agent",
+            "start",
+            "child",
+            "-c",
+            "check_for_update_on_startup=false"
+          ]
         })
 
       refute "agent.command must not start or delegate to another herdr agent when delegation_allowed is false" in errors(
