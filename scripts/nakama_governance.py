@@ -87,11 +87,16 @@ def read_policy(root: Path) -> dict[str, str]:
     return policy
 
 
+def policy_branches(policy: dict[str, str], key: str) -> set[str]:
+    return {item.strip() for item in policy.get(key, "").split(",") if item.strip()}
+
+
 def validate_branch_format(branch: str, policy: dict[str, str]) -> str | None:
     if not branch:
         return "Branch policy error: detached HEAD is not allowed for commits."
-    protected = {item.strip() for item in policy.get("PROTECTED_BRANCHES", "").split(",")}
-    if branch in protected:
+    if branch in policy_branches(policy, "PROTECTED_BRANCHES"):
+        return None
+    if branch in policy_branches(policy, "LEGACY_BRANCH_ALLOWLIST"):
         return None
     team = re.escape(policy["LINEAR_TEAM_KEY"])
     branch_pattern = rf"^(?:{BRANCH_TYPES})/{team}-[1-9][0-9]*-[a-z0-9]+(?:-[a-z0-9]+)*$"
@@ -151,9 +156,7 @@ def command_branch(args: argparse.Namespace) -> None:
             file=sys.stderr,
         )
         raise SystemExit(1)
-    if args.format_only or branch in {
-        item.strip() for item in policy.get("PROTECTED_BRANCHES", "").split(",")
-    }:
+    if args.format_only or branch in policy_branches(policy, "PROTECTED_BRANCHES"):
         return
     api_key = os.environ.get("LINEAR_API_KEY")
     if not api_key:
@@ -583,6 +586,12 @@ def command_self_test(_: argparse.Namespace) -> None:
         fail("Self-test failed: a valid branch was rejected.")
     if any(validate_branch_format(value, policy) is None for value in failing):
         fail("Self-test failed: an invalid branch was accepted.")
+    legacy_branch = "feature/cx/NAK-5-branch-governance"
+    migration_policy = {**policy, "LEGACY_BRANCH_ALLOWLIST": legacy_branch}
+    if validate_branch_format(legacy_branch, migration_policy):
+        fail("Self-test failed: an allowlisted legacy branch was rejected.")
+    if validate_branch_format("feature/cx/NAK-6-other-work", migration_policy) is None:
+        fail("Self-test failed: an unlisted legacy branch was accepted.")
     valid_messages = (
         "feat: add branch policy",
         "fix(hooks): reject missing Linear issues",

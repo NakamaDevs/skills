@@ -11,7 +11,7 @@ Existing open branches can keep the names that created them.
 
 Do not put real PII or PHI in skills, examples, fixtures, prompts, logs, or
 review text. Use generated synthetic data and reserved domains.
-Follow the [Kaicho privacy policy](https://github.com/NakamaDevs/Kaicho/blob/5fbb5290061e3aa78ebb9079f638737e2d783845/governance/privacy.md).
+Follow the [Kaicho privacy policy](https://github.com/NakamaDevs/Kaicho/blob/7cb39adc0e0c21fac943415c66d51b65a231cabd/governance/privacy.md).
 
 Keep each skill in `skills/<name>/`.
 Each skill must contain `SKILL.md` with `name` and `description` frontmatter.
