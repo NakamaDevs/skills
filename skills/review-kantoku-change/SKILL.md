@@ -7,7 +7,7 @@ description: Route Kantoku pull-request review across the Elixir/Phoenix/Ash Dis
 
 ## Route
 
-1. Read `AGENTS.md`, `.governance/engineering-v1.md`, and the final base/head diff.
+1. Read `AGENTS.md`, `.governance/engineering-v2.md`, `.governance/privacy.md`, and the final base/head diff.
 2. For `discord_manager/`, invoke `$review-kantoku-elixir` and also follow its nested `AGENTS.md`.
 3. For `nakama_tray/`, invoke `$review-kantoku-swift`.
 4. For `.github/`, `scripts/`, `mise.toml`, packaging, releases, or deployment, invoke `$review-kantoku-automation`.

@@ -17,7 +17,7 @@ import urllib.request
 from pathlib import Path
 from typing import NoReturn
 
-CLI_VERSION = "1.2.0"
+CLI_VERSION = "2.0.0"
 TYPES = "feat|fix|docs|refactor|test|build|ci|chore|perf|style|revert"
 # Branch prefixes accept every commit type. "feature" stays as a legacy alias and
 # must precede "feat" so the longer prefix matches first.
@@ -26,10 +26,11 @@ COMMIT_PATTERN = re.compile(rf"^({TYPES})(\([a-z0-9][a-z0-9-]*\))?!?: \S.*$")
 EXACT_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[+-][A-Za-z0-9_.-]+)?$")
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 RUNNER_LABEL = re.compile(
-    r"nakama-(?:dependabot-)?(?:linux-x64|macos-arm64|windows-arm64|windows-x64)"
+    r"nakama-(?:dependabot-)?(?:linux-(?:x64|arm64)|macos-arm64|windows-arm64|windows-x64)"
     r"|nakama-untrusted-metadata-linux-x64"
 )
 PERSISTENT_RUNNERS = {
+    "nakama-linux-arm64",
     "nakama-linux-x64",
     "nakama-macos-arm64",
     "nakama-windows-x64",
@@ -39,6 +40,11 @@ DEPENDABOT_RUNNERS = {
     "nakama-dependabot-macos-arm64",
     "nakama-dependabot-windows-x64",
 }
+PORTABLE_DEPENDABOT_RUNNERS = {
+    "nakama-dependabot-linux-x64",
+    "nakama-dependabot-macos-arm64",
+}
+UNAVAILABLE_RUNNERS = {"nakama-dependabot-linux-arm64"}
 RETIRED_RUNNERS = {
     "nakama-windows-arm64",
     "nakama-dependabot-windows-arm64",
@@ -47,6 +53,12 @@ WORKLOAD_RUNNERS = {
     "native-macos": {"nakama-macos-arm64"},
     "native-windows": {"nakama-windows-x64"},
     "server-only": {"nakama-linux-x64"},
+    "portable-non-server": {
+        "nakama-linux-arm64",
+        "nakama-linux-x64",
+        "nakama-macos-arm64",
+        "nakama-windows-x64",
+    },
     "cross-platform-desktop": {
         "nakama-linux-x64",
         "nakama-macos-arm64",
@@ -60,9 +72,22 @@ def fail(message: str, code: int = 1) -> NoReturn:
     raise SystemExit(code)
 
 
-def run_git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+def run_git(
+    *args: str, check: bool = True, isolated: bool = False
+) -> subprocess.CompletedProcess[str]:
+    environment = None
+    if isolated:
+        environment = os.environ.copy()
+        for key in tuple(environment):
+            if key.startswith("GIT_"):
+                environment.pop(key)
     return subprocess.run(
-        ["git", *args], check=check, capture_output=True, text=True, encoding="utf-8"
+        ["git", *args],
+        check=check,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=environment,
     )
 
 
@@ -73,12 +98,9 @@ def repository_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
-def read_policy(root: Path) -> dict[str, str]:
-    path = root / ".branch-policy"
-    if not path.is_file():
-        fail(f"Branch policy error: {path} is missing.")
+def parse_policy(contents: str) -> dict[str, str]:
     policy: dict[str, str] = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in contents.splitlines():
         if "=" in line and not line.lstrip().startswith("#"):
             key, value = line.split("=", 1)
             policy[key.strip()] = value.strip()
@@ -87,16 +109,58 @@ def read_policy(root: Path) -> dict[str, str]:
     return policy
 
 
+def read_policy(root: Path) -> dict[str, str]:
+    path = root / ".branch-policy"
+    if not path.is_file():
+        fail(f"Branch policy error: {path} is missing.")
+    return parse_policy(path.read_text(encoding="utf-8"))
+
+
+def read_policy_at_revision(root: Path, revision: str) -> dict[str, str] | None:
+    tree = run_git(
+        "--no-replace-objects",
+        "-C",
+        str(root),
+        "ls-tree",
+        "--name-only",
+        revision,
+        "--",
+        ".branch-policy",
+        check=False,
+        isolated=True,
+    )
+    if tree.returncode != 0:
+        fail("PR branch policy error: base commit unavailable; checkout with fetch-depth 2 or greater.")
+    if tree.stdout.strip() != ".branch-policy":
+        return None
+    result = run_git(
+        "--no-replace-objects",
+        "-C",
+        str(root),
+        "show",
+        f"{revision}:.branch-policy",
+        check=False,
+        isolated=True,
+    )
+    if result.returncode != 0:
+        fail("PR branch policy error: could not read .branch-policy from the base commit.")
+    return parse_policy(result.stdout)
+
+
+def policy_branches(policy: dict[str, str], key: str) -> set[str]:
+    return {item.strip() for item in policy.get(key, "").split(",") if item.strip()}
+
+
 def validate_branch_format(branch: str, policy: dict[str, str]) -> str | None:
     if not branch:
         return "Branch policy error: detached HEAD is not allowed for commits."
-    protected = {item.strip() for item in policy.get("PROTECTED_BRANCHES", "").split(",")}
-    if branch in protected:
+    if branch in policy_branches(policy, "PROTECTED_BRANCHES"):
+        return None
+    if branch in policy_branches(policy, "LEGACY_BRANCH_ALLOWLIST"):
         return None
     team = re.escape(policy["LINEAR_TEAM_KEY"])
-    human = rf"^(?:{BRANCH_TYPES})/[a-z0-9]+(?:-[a-z0-9]+)*-{team}-[1-9][0-9]*-[a-z0-9]+(?:-[a-z0-9]+)*$"
-    agent = rf"^(?:{BRANCH_TYPES})/cx/{team}-[1-9][0-9]*-[a-z0-9]+(?:-[a-z0-9]+)*$"
-    if re.fullmatch(rf"(?:{human})|(?:{agent})", branch):
+    branch_pattern = rf"^(?:{BRANCH_TYPES})/{team}-[1-9][0-9]*-[a-z0-9]+(?:-[a-z0-9]+)*$"
+    if re.fullmatch(branch_pattern, branch):
         return None
     return f"Invalid branch name: {branch}"
 
@@ -147,14 +211,12 @@ def command_branch(args: argparse.Namespace) -> None:
         team = policy["LINEAR_TEAM_KEY"]
         print(error, file=sys.stderr)
         print(
-            f"Use <type>/username-{team}-123-description or <type>/cx/{team}-123-description.",
+            f"Use <type>/{team}-123-description without an identity segment.",
             f"Types: {BRANCH_TYPES.replace('|', ', ')}.",
             file=sys.stderr,
         )
         raise SystemExit(1)
-    if args.format_only or branch in {
-        item.strip() for item in policy.get("PROTECTED_BRANCHES", "").split(",")
-    }:
+    if args.format_only or branch in policy_branches(policy, "PROTECTED_BRANCHES"):
         return
     api_key = os.environ.get("LINEAR_API_KEY")
     if not api_key:
@@ -196,13 +258,11 @@ def command_pr_branch(_: argparse.Namespace) -> None:
         return
     if not base:
         fail("PR branch policy error: base commit unavailable; checkout with fetch-depth 2 or greater.")
-    result = run_git("ls-tree", "--name-only", base, "--", ".branch-policy", check=False)
-    if result.returncode != 0:
-        fail("PR branch policy error: base commit unavailable; checkout with fetch-depth 2 or greater.")
-    if result.stdout.strip() != ".branch-policy":
+    policy = read_policy_at_revision(repository_root(), base)
+    if policy is None:
         print("PR branch policy bootstrap: the base predates .branch-policy; enforcement begins after merge.")
         return
-    error = validate_branch_format(head, read_policy(repository_root()))
+    error = validate_branch_format(head, policy)
     if error:
         fail(error)
 
@@ -385,19 +445,41 @@ def runner_policy_errors(path: str, text: str) -> list[str]:
                 f"{location}: retired Windows ARM64 runner labels are forbidden: "
                 f"{', '.join(sorted(retired))}; active Windows CI uses x64 only."
             )
+        unavailable = labels & UNAVAILABLE_RUNNERS
+        if unavailable:
+            errors.append(
+                f"{location}: unavailable runner labels are forbidden: "
+                f"{', '.join(sorted(unavailable))}."
+            )
         workload_matches = re.findall(r"#\s*nakama-workload:\s*([a-z0-9-]+)", block)
         workload = workload_matches[0] if len(workload_matches) == 1 else ""
 
-        if persistent and len(workload_matches) != 1:
+        if len(workload_matches) > 1:
+            errors.append(
+                f"{location}: execution requires at most one "
+                "'# nakama-workload: <class>' declaration."
+            )
+        elif persistent and not workload:
             errors.append(
                 f"{location}: persistent execution requires exactly one "
                 "'# nakama-workload: <class>' declaration."
+            )
+        elif not persistent and workload in WORKLOAD_RUNNERS:
+            errors.append(
+                f"{location}: workload {workload} requires an approved "
+                "persistent capability label."
             )
         elif persistent and workload not in WORKLOAD_RUNNERS:
             errors.append(f"{location}: unknown workload class {workload!r}.")
         elif persistent:
             expected = WORKLOAD_RUNNERS[workload]
-            if workload == "cross-platform-desktop":
+            if workload == "portable-non-server":
+                if len(persistent) != 1 or not persistent <= expected:
+                    errors.append(
+                        f"{location}: portable non-server jobs require one active "
+                        "persistent capability label."
+                    )
+            elif workload == "cross-platform-desktop":
                 if not persistent <= expected:
                     errors.append(
                         f"{location}: cross-platform desktop jobs may use only "
@@ -471,25 +553,49 @@ def runner_policy_errors(path: str, text: str) -> list[str]:
                 errors.append(
                     f"{location}: persistent PR execution must reject forks before runner assignment."
                 )
-            for label in sorted(persistent):
-                expected = label.replace("nakama-", "nakama-dependabot-", 1)
-                safe_pair = re.compile(
-                    author_selector.pattern
-                    + rf"\s*&&\s*['\"]{re.escape(expected)}['\"]"
-                    + rf"\s*\|\|\s*['\"]{re.escape(label)}['\"]"
-                )
-                if expected not in dependabot or not safe_pair.search(runs_on):
+            if workload == "portable-non-server":
+                persistent_label = next(iter(persistent))
+                if len(dependabot) != 1:
                     errors.append(
-                        f"{location}: route pull_request.user.login == 'dependabot[bot]' "
-                        f"directly to {expected}, then {label}; reversed, mismatched-platform, or "
-                        "configurable fallback is forbidden."
+                        f"{location}: portable non-server PR jobs require one disposable "
+                        "Dependabot capability label."
                     )
-            for label in sorted(dependabot):
-                expected = label.replace("nakama-dependabot-", "nakama-", 1)
-                if expected not in persistent:
-                    errors.append(
-                        f"{location}: {label} must pair with {expected} for non-Dependabot events."
+                else:
+                    dependabot_label = next(iter(dependabot))
+                    safe_pair = re.compile(
+                        author_selector.pattern
+                        + rf"\s*&&\s*['\"]{re.escape(dependabot_label)}['\"]"
+                        + rf"\s*\|\|\s*['\"]{re.escape(persistent_label)}['\"]"
                     )
+                    if (
+                        dependabot_label not in PORTABLE_DEPENDABOT_RUNNERS
+                        or not safe_pair.search(runs_on)
+                    ):
+                        errors.append(
+                            f"{location}: portable non-server PR jobs must route Dependabot "
+                            "to one implemented disposable capability, then the declared "
+                            "persistent capability."
+                        )
+            else:
+                for label in sorted(persistent):
+                    expected = label.replace("nakama-", "nakama-dependabot-", 1)
+                    safe_pair = re.compile(
+                        author_selector.pattern
+                        + rf"\s*&&\s*['\"]{re.escape(expected)}['\"]"
+                        + rf"\s*\|\|\s*['\"]{re.escape(label)}['\"]"
+                    )
+                    if expected not in dependabot or not safe_pair.search(runs_on):
+                        errors.append(
+                            f"{location}: route pull_request.user.login == 'dependabot[bot]' "
+                            f"directly to {expected}, then {label}; reversed, mismatched-platform, or "
+                            "configurable fallback is forbidden."
+                        )
+                for label in sorted(dependabot):
+                    expected = label.replace("nakama-dependabot-", "nakama-", 1)
+                    if expected not in persistent:
+                        errors.append(
+                            f"{location}: {label} must pair with {expected} for non-Dependabot events."
+                        )
     if cross_platform_labels and cross_platform_labels != WORKLOAD_RUNNERS["cross-platform-desktop"]:
         missing = WORKLOAD_RUNNERS["cross-platform-desktop"] - cross_platform_labels
         errors.append(
@@ -558,31 +664,105 @@ def command_supply_chain(_: argparse.Namespace) -> None:
     print("Supply-chain policy checks passed.")
 
 
+def verify_base_policy_lookup() -> None:
+    with tempfile.TemporaryDirectory(prefix="nakama-policy-test-") as directory:
+        root = Path(directory)
+        hooks = root / ".empty-hooks"
+        hooks.mkdir()
+        run_git("-C", directory, "init", "-q", isolated=True)
+        run_git(
+            "-C", directory, "config", "core.hooksPath", str(hooks), isolated=True
+        )
+        run_git("-C", directory, "config", "user.name", "Test", isolated=True)
+        run_git(
+            "-C", directory, "config", "user.email", "test@example.com", isolated=True
+        )
+        policy_path = root / ".branch-policy"
+        policy_path.write_text(
+            "LINEAR_TEAM_KEY=NAK\nLINEAR_PROJECT_NAME=Test\nPROTECTED_BRANCHES=main\n"
+            "LEGACY_BRANCH_ALLOWLIST=\n",
+            encoding="utf-8",
+        )
+        run_git("-C", directory, "add", ".branch-policy", isolated=True)
+        run_git(
+            "-C",
+            directory,
+            "commit",
+            "-q",
+            "-m",
+            "test: seed policy",
+            isolated=True,
+        )
+        base = run_git(
+            "-C", directory, "rev-parse", "HEAD", isolated=True
+        ).stdout.strip()
+        legacy_branch = "feature/cx/NAK-5-branch-governance"
+        policy_path.write_text(
+            "LINEAR_TEAM_KEY=NAK\nLINEAR_PROJECT_NAME=Test\nPROTECTED_BRANCHES=main\n"
+            f"LEGACY_BRANCH_ALLOWLIST={legacy_branch}\n",
+            encoding="utf-8",
+        )
+        run_git("-C", directory, "add", ".branch-policy", isolated=True)
+        run_git(
+            "-C",
+            directory,
+            "commit",
+            "-q",
+            "-m",
+            "test: self-allow migration branch",
+            isolated=True,
+        )
+        self_allowing_head = run_git(
+            "-C", directory, "rev-parse", "HEAD", isolated=True
+        ).stdout.strip()
+        run_git(
+            "-C",
+            directory,
+            "replace",
+            base,
+            self_allowing_head,
+            isolated=True,
+        )
+        trusted_policy = read_policy_at_revision(root, base)
+        if trusted_policy is None or legacy_branch in policy_branches(
+            trusted_policy, "LEGACY_BRANCH_ALLOWLIST"
+        ):
+            fail("Self-test failed: the PR branch gate trusted the head allowlist.")
+
+
 def command_self_test(_: argparse.Namespace) -> None:
     policy = read_policy(repository_root())
     passing = (
-        "feature/hectorddmx-NAK-5-branch-governance",
-        "fix/hector-dd-NAK-5-branch-governance",
-        "feature/cx/NAK-5-branch-governance",
-        "fix/cx/NAK-5-branch-governance",
-        "feat/cx/NAK-5-branch-governance",
-        "docs/cx/NAK-5-branch-governance",
-        "chore/hectorddmx-NAK-5-branch-governance",
-        "revert/cx/NAK-5-branch-governance",
+        "feature/NAK-5-branch-governance",
+        "fix/NAK-5-branch-governance",
+        "feat/NAK-5-branch-governance",
+        "docs/NAK-5-branch-governance",
+        "chore/NAK-5-branch-governance",
+        "revert/NAK-5-branch-governance",
         "main",
     )
     failing = (
-        "feature/NAK-5-branch-governance",
-        "fix/cx/hectorddmx-NAK-5-branch-governance",
-        "feature/cx/missing-ticket",
-        "chores/hectorddmx-NAK-5-branch-governance",
-        "release/cx/NAK-5-branch-governance",
-        "fix/cx/nak-5-branch-governance",
+        "feature/user-NAK-5-branch-governance",
+        "fix/user-name-NAK-5-branch-governance",
+        "feature/cx/NAK-5-branch-governance",
+        "fix/cx/NAK-5-branch-governance",
+        "fix/cx/user-NAK-5-branch-governance",
+        "feature/missing-ticket",
+        "chores/NAK-5-branch-governance",
+        "release/NAK-5-branch-governance",
+        "fix/nak-5-branch-governance",
     )
     if any(validate_branch_format(value, policy) for value in passing):
         fail("Self-test failed: a valid branch was rejected.")
     if any(validate_branch_format(value, policy) is None for value in failing):
         fail("Self-test failed: an invalid branch was accepted.")
+    legacy_branch = "feature/cx/NAK-5-branch-governance"
+    migration_policy = {**policy, "LEGACY_BRANCH_ALLOWLIST": legacy_branch}
+    if validate_branch_format(legacy_branch, migration_policy):
+        fail("Self-test failed: an allowlisted legacy branch was rejected.")
+    if validate_branch_format("feature/cx/NAK-6-other-work", migration_policy) is None:
+        fail("Self-test failed: an unlisted legacy branch was accepted.")
+    verify_base_policy_lookup()
     valid_messages = (
         "feat: add branch policy",
         "fix(hooks): reject missing Linear issues",
@@ -619,6 +799,11 @@ jobs:
     safe_server_workflow = safe_runner_workflow.replace(
         "native-windows", "server-only"
     ).replace("windows-x64", "linux-x64")
+    safe_portable_workflow = safe_runner_workflow.replace(
+        "native-windows", "portable-non-server"
+    ).replace(
+        "nakama-dependabot-windows-x64", "nakama-dependabot-macos-arm64"
+    ).replace("nakama-windows-x64", "nakama-linux-arm64")
     safe_metadata_workflow = """on:
   pull_request:
 jobs:
@@ -672,6 +857,19 @@ jobs:
         ),
         safe_macos_workflow.replace("    # nakama-workload: native-macos\n", ""),
         safe_runner_workflow.replace("native-windows", "server-only"),
+        safe_portable_workflow.replace(
+            "nakama-dependabot-macos-arm64", "nakama-dependabot-windows-x64"
+        ),
+        safe_portable_workflow.replace(
+            "nakama-dependabot-macos-arm64", "nakama-dependabot-linux-arm64"
+        ),
+        safe_portable_workflow.replace(
+            "'nakama-linux-arm64' }}", "'ubuntu-latest' }}"
+        ),
+        safe_portable_workflow.replace(
+            "'nakama-linux-arm64' }}",
+            "'nakama-linux-arm64' || 'nakama-linux-x64' }}",
+        ),
         safe_runner_workflow.replace("windows-x64", "windows-arm64"),
         safe_cross_platform_workflow.replace(
             "  linux:\n    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}\n"
@@ -712,6 +910,8 @@ jobs:
         fail("Self-test failed: a native macOS lane was rejected.")
     if runner_policy_errors("safe-server.yml", safe_server_workflow):
         fail("Self-test failed: a server-only Linux lane was rejected.")
+    if runner_policy_errors("safe-portable.yml", safe_portable_workflow):
+        fail("Self-test failed: a portable non-server lane was rejected.")
     if runner_policy_errors("safe-metadata.yml", safe_metadata_workflow):
         fail("Self-test failed: a metadata-only disposable lane was rejected.")
     if runner_policy_errors("safe-cross-platform.yml", safe_cross_platform_workflow):

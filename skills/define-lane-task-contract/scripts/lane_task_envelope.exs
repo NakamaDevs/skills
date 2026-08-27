@@ -27,7 +27,10 @@ defmodule LaneTaskEnvelope do
   @branch_type_prefixes ~w(feature feat fix docs refactor test build ci chore perf style revert)
 
   @issue_pattern ~r/^[A-Z]{2,10}-[0-9]+$/
-  @branch_pattern ~r{^(#{Enum.join(@branch_type_prefixes, "|")})/[a-z0-9][a-z0-9/-]*$}
+  @branch_pattern ~r<^(#{Enum.join(@branch_type_prefixes, "|")})/[A-Z]{2,10}-[1-9][0-9]*-[a-z0-9]+(?:-[a-z0-9]+)*$>
+  @legacy_branch_pattern ~r<^(#{Enum.join(@branch_type_prefixes, "|")})/(?:cx/[A-Z]{2,10}-[1-9][0-9]*-[a-z0-9]+(?:-[a-z0-9]+)*|[a-z0-9]+(?:-[a-z0-9]+)*-[A-Z]{2,10}-[1-9][0-9]*-[a-z0-9]+(?:-[a-z0-9]+)*)$>
+  @branch_error "branch must use <type>/ORG-123-short-description or a valid v1 migration shape"
+  @trusted_policy_revision_env "LANE_TRUSTED_POLICY_REVISION"
   @parent_agent_pattern ~r/^[a-z][a-z0-9_-]{0,31}$/
   @argv_token_pattern ~r{^[A-Za-z0-9_./:=,@-]+$}
   @sha_pattern ~r/^[0-9a-f]{40}$/
@@ -78,34 +81,117 @@ defmodule LaneTaskEnvelope do
   @doc """
   Live git verification that `integration.base_head` exists and matches
   the actual merge base of `branch` and `integration.target`, resolved in
-  the declared `worktree`. This is deliberately separate from `validate/1`,
-  which stays pure JSON-schema validation with no filesystem or process
-  I/O: `validate/1` alone does NOT prove the envelope's integration claim
-  is real, only that it is well-formed. Call this before trusting
-  `integration.base_head` for anything, and never claim `validate/1` alone
-  covers it.
+  the declared `worktree`. For a v1 branch shape, this check also reads the
+  exact migration allowlist from a trusted revision supplied outside the
+  envelope. This is deliberately separate from `validate/1`, which stays pure
+  JSON-schema validation with no filesystem or process I/O. `validate/1` alone
+  does NOT prove the envelope's integration or migration claim. Call this
+  before trusting either claim.
   """
-  @spec resolve_integration_head(map()) :: :ok | {:error, [String.t()]}
-  def resolve_integration_head(envelope) do
+  @spec resolve_integration_head(map(), keyword()) :: :ok | {:error, [String.t()]}
+  def resolve_integration_head(envelope, options \\ []) do
     worktree = envelope["worktree"]
     branch = envelope["branch"]
     target = get_in(envelope, ["integration", "target"])
     base_head = get_in(envelope, ["integration", "base_head"])
+    trusted_policy_revision = Keyword.get(options, :trusted_policy_revision)
 
     cond do
       not is_binary(worktree) or not File.dir?(worktree) ->
         {:error, ["worktree does not exist: #{inspect(worktree)}"]}
 
-      not commit_exists?(worktree, base_head) ->
-        {:error, ["integration.base_head #{base_head} does not exist in the worktree"]}
-
       true ->
-        verify_merge_base(worktree, branch, target, base_head)
+        with :ok <- branch_allowed_by_policy?(worktree, branch, trusted_policy_revision) do
+          if commit_exists?(worktree, base_head) do
+            verify_merge_base(worktree, branch, target, base_head)
+          else
+            {:error, ["integration.base_head #{base_head} does not exist in the worktree"]}
+          end
+        end
     end
   end
 
+  defp branch_allowed_by_policy?(worktree, branch, trusted_policy_revision) do
+    cond do
+      Regex.match?(@branch_pattern, branch) ->
+        :ok
+
+      Regex.match?(@legacy_branch_pattern, branch) ->
+        case resolve_policy_commit(worktree, trusted_policy_revision) do
+          {:ok, trusted_commit} ->
+            if policy_allows?(worktree, trusted_commit, branch) do
+              :ok
+            else
+              {:error, ["branch is not allowed by the trusted branch policy revision"]}
+            end
+
+          :error ->
+            {:error,
+             [
+               "a v1 branch requires #{@trusted_policy_revision_env} as a full 40-character lowercase commit SHA from the coordinator"
+             ]}
+        end
+
+      true ->
+        {:error, [@branch_error]}
+    end
+  end
+
+  defp resolve_policy_commit(_worktree, revision) when not is_binary(revision), do: :error
+
+  defp resolve_policy_commit(worktree, revision) do
+    revision = String.trim(revision)
+
+    if not Regex.match?(@sha_pattern, revision) do
+      :error
+    else
+      case System.cmd(
+             "git",
+             [
+               "--no-replace-objects",
+               "-C",
+               worktree,
+               "rev-parse",
+               "--verify",
+               "--end-of-options",
+               "#{revision}^{commit}"
+             ],
+             stderr_to_stdout: true
+           ) do
+        {commit, 0} -> {:ok, String.trim(commit)}
+        {_output, _status} -> :error
+      end
+    end
+  end
+
+  defp policy_allows?(worktree, policy_commit, branch) do
+    case System.cmd(
+           "git",
+           ["--no-replace-objects", "-C", worktree, "show", "#{policy_commit}:.branch-policy"],
+           stderr_to_stdout: true
+         ) do
+      {policy, 0} -> branch in legacy_branch_allowlist(policy)
+      {_output, _status} -> false
+    end
+  end
+
+  defp legacy_branch_allowlist(policy) do
+    policy
+    |> String.split("\n")
+    |> Enum.find_value("", fn line ->
+      case String.split(line, "=", parts: 2) do
+        [key, value] -> if String.trim(key) == "LEGACY_BRANCH_ALLOWLIST", do: value
+        _other -> nil
+      end
+    end)
+    |> String.split(",", trim: true)
+    |> Enum.map(&String.trim/1)
+  end
+
   defp commit_exists?(worktree, sha) do
-    case System.cmd("git", ["-C", worktree, "cat-file", "-e", sha <> "^{commit}"],
+    case System.cmd(
+           "git",
+           ["--no-replace-objects", "-C", worktree, "cat-file", "-e", sha <> "^{commit}"],
            stderr_to_stdout: true
          ) do
       {_output, 0} -> true
@@ -114,7 +200,9 @@ defmodule LaneTaskEnvelope do
   end
 
   defp verify_merge_base(worktree, branch, target, base_head) do
-    case System.cmd("git", ["-C", worktree, "merge-base", branch, target],
+    case System.cmd(
+           "git",
+           ["--no-replace-objects", "-C", worktree, "merge-base", branch, target],
            stderr_to_stdout: true
          ) do
       {output, 0} ->
@@ -283,11 +371,13 @@ defmodule LaneTaskEnvelope do
   defp scalar_field_errors(envelope) do
     []
     |> collect(missing(envelope, "role"))
-    |> collect(if Map.has_key?(envelope, "role") and envelope["role"] != "lane" do
-      ["role must be \"lane\""]
-    else
-      []
-    end)
+    |> collect(
+      if Map.has_key?(envelope, "role") and envelope["role"] != "lane" do
+        ["role must be \"lane\""]
+      else
+        []
+      end
+    )
     |> collect(non_empty_string_field(envelope, "owner"))
     |> collect(issue_errors(envelope))
     |> collect(branch_errors(envelope))
@@ -345,15 +435,15 @@ defmodule LaneTaskEnvelope do
     case Map.fetch(envelope, "branch") do
       :error -> ["branch is required"]
       {:ok, value} when is_binary(value) -> branch_pattern_errors(value)
-      {:ok, _value} -> ["branch must start with an accepted Conventional Commit type prefix"]
+      {:ok, _value} -> [@branch_error]
     end
   end
 
   defp branch_pattern_errors(value) do
-    if Regex.match?(@branch_pattern, value) do
+    if Regex.match?(@branch_pattern, value) or Regex.match?(@legacy_branch_pattern, value) do
       []
     else
-      ["branch must start with an accepted Conventional Commit type prefix"]
+      [@branch_error]
     end
   end
 
@@ -638,9 +728,14 @@ defmodule LaneTaskEnvelope do
 
   defp endpoint_expect_status_errors(endpoint) do
     case Map.fetch(endpoint, "expect_status") do
-      {:ok, value} when is_integer(value) and value >= 100 and value <= 599 -> []
-      {:ok, _value} -> ["live_smoke.endpoint.expect_status must be an integer from 100 through 599"]
-      :error -> []
+      {:ok, value} when is_integer(value) and value >= 100 and value <= 599 ->
+        []
+
+      {:ok, _value} ->
+        ["live_smoke.endpoint.expect_status must be an integer from 100 through 599"]
+
+      :error ->
+        []
     end
   end
 
@@ -652,7 +747,9 @@ defmodule LaneTaskEnvelope do
       {:ok, decisions} when is_list(decisions) ->
         decisions
         |> Enum.with_index()
-        |> Enum.flat_map(fn {decision, index} -> deletion_decision_object_errors(index, decision) end)
+        |> Enum.flat_map(fn {decision, index} ->
+          deletion_decision_object_errors(index, decision)
+        end)
 
       {:ok, _value} ->
         ["deletion_decisions must be a list of {target, replacement_decision} objects"]
@@ -935,7 +1032,9 @@ defmodule LaneTaskEnvelope do
             list
             |> Enum.with_index()
             |> Enum.filter(fn {command, _index} -> is_map(command) end)
-            |> Enum.map(fn {command, index} -> {"#{field}[#{index}]", Map.get(command, "command")} end)
+            |> Enum.map(fn {command, index} ->
+              {"#{field}[#{index}]", Map.get(command, "command")}
+            end)
 
           _other ->
             []
@@ -1031,7 +1130,9 @@ defmodule LaneTaskEnvelope do
     resolved =
       writers
       |> Enum.with_index()
-      |> Enum.filter(fn {writer, _index} -> is_map(writer) and is_binary(Map.get(writer, "path")) end)
+      |> Enum.filter(fn {writer, _index} ->
+        is_map(writer) and is_binary(Map.get(writer, "path"))
+      end)
       |> Enum.map(fn {writer, index} ->
         {index, resolve_writer_path(worktree, Map.get(writer, "path"))}
       end)
@@ -1069,9 +1170,14 @@ defmodule LaneTaskEnvelope do
     expanded = Path.expand(path, worktree)
 
     cond do
-      expanded == worktree -> {:ok, ""}
-      String.starts_with?(expanded, worktree <> "/") -> {:ok, String.trim_leading(expanded, worktree <> "/")}
-      true -> {:error, :escape}
+      expanded == worktree ->
+        {:ok, ""}
+
+      String.starts_with?(expanded, worktree <> "/") ->
+        {:ok, String.trim_leading(expanded, worktree <> "/")}
+
+      true ->
+        {:error, :escape}
     end
   end
 
@@ -1276,8 +1382,13 @@ unless Application.get_env(:lane_task_contract, :cli_suppressed, false) do
         |> File.read!()
         |> JSON.decode!()
 
+      trusted_policy_revision = System.get_env("LANE_TRUSTED_POLICY_REVISION")
+
       with :ok <- LaneTaskEnvelope.validate(envelope),
-           :ok <- LaneTaskEnvelope.resolve_integration_head(envelope),
+           :ok <-
+             LaneTaskEnvelope.resolve_integration_head(envelope,
+               trusted_policy_revision: trusted_policy_revision
+             ),
            :ok <- LaneTaskEnvelope.resolve_writer_paths(envelope) do
         IO.puts("lane task envelope: valid (#{path})")
       else

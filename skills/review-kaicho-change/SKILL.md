@@ -7,7 +7,7 @@ description: Review Kaicho governance, policy scripts, GitHub configuration, run
 
 ## Prepare
 
-1. Read `AGENTS.md` and `governance/engineering-v1.md`.
+1. Read `AGENTS.md`, `governance/engineering-v2.md`, and `governance/privacy.md`.
 2. Identify the base/head diff and the Linear acceptance criteria.
 3. Classify affected areas: contract, documentation, executable checker, GitHub settings/workflow, runner policy, or repository inventory.
 4. Read [governance-review.md](references/governance-review.md).

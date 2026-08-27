@@ -7,7 +7,7 @@ description: Review Runner Fleet infrastructure changes across macOS, Linux, Win
 
 ## Prepare
 
-1. Read `AGENTS.md`, `.governance/engineering-v1.md`, the Linear issue, and final base/head diff.
+1. Read `AGENTS.md`, `.governance/engineering-v2.md`, `.governance/privacy.md`, the Linear issue, and final base/head diff.
 2. Identify affected host families, architectures, labels, service accounts, secrets, workflows, and consumer repositories.
 3. Read [fleet-review.md](references/fleet-review.md). Invoke `$review-runner-fleet-unix` for shell/macOS/Linux and `$review-runner-fleet-windows` for PowerShell/Windows. Invoke both for shared manifests, labels, or routing contracts.
 

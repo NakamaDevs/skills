@@ -13,7 +13,7 @@ field is required except `live_smoke`, which is required exactly when
 | `role` | string | Must equal `"lane"`. This contract only covers a task delegated from a coordinator to one lane. |
 | `owner` | string | Non-empty. The human or team accountable for the work. |
 | `issue` | string | Matches `ORG-123` (`^[A-Z]{2,10}-[0-9]+$`). |
-| `branch` | string | Starts with an accepted Conventional Commit type: `feature`, `feat`, `fix`, `docs`, `refactor`, `test`, `build`, `ci`, `chore`, `perf`, `style`, or `revert`, followed by `/` and a lowercase slug. Matches the branch-prefix rule already enforced by `scripts/nakama_governance.py`. |
+| `branch` | string | Uses `<type>/ORG-123-short-description`. `<type>` is `feature`, `feat`, `fix`, `docs`, `refactor`, `test`, `build`, `ci`, `chore`, `perf`, `style`, or `revert`. A v1 shape is valid only during migration. `resolve_integration_head/2` must find its exact name in `LEGACY_BRANCH_ALLOWLIST` at the trusted revision supplied outside the envelope. Do not create a new owner or agent namespace. |
 | `worktree` | string | Absolute path to the isolated git worktree the lane must work in. |
 | `parent_task` | string | Non-empty identifier for the coordinator task that created this envelope. |
 | `parent_agent` | string | Matches the herdr agent name pattern `^[a-z][a-z0-9_-]{0,31}$`. This is the exact `herdr agent prompt` target for [`notify_parent.exs`](../scripts/notify_parent.exs); see [notify-parent-protocol.md](notify-parent-protocol.md). |
@@ -71,12 +71,19 @@ current head of `integration.target`, not a head that predates an earlier
 integration. Next work starts from updated trunk, not from a branch that
 forked before the last merge.
 
+For a v1 migration branch, the coordinator supplies
+`LANE_TRUSTED_POLICY_REVISION` separately as a full 40-character lowercase
+commit SHA. A branch name or another symbolic revision is invalid. The
+validator reads the migration allowlist from that commit. It disables Git
+replacement objects for the read. It never trusts `integration.target` for
+this authorization.
+
 `LaneTaskEnvelope.validate/1` only checks the *shape* of `integration`
 above — it never touches the filesystem or runs git, by design (see
 [command-safety.md](command-safety.md)'s note on `validate/1` staying pure).
 Whether `base_head` actually exists and actually equals the merge base of
 `branch` and `target` is a separate, live check:
-`LaneTaskEnvelope.resolve_integration_head/1` resolves `target` and
+`LaneTaskEnvelope.resolve_integration_head/2` resolves `target` and
 `base_head` in the envelope's own declared `worktree` by shelling out to
 `git -C <worktree> cat-file -e` and `git -C <worktree> merge-base`. The
 normal documented CLI (`elixir lane_task_envelope.exs <envelope.json>`)
@@ -84,7 +91,7 @@ already runs this check immediately after `validate/1` succeeds — an
 unknown or stale `base_head` fails that CLI run with a clear message. Code
 calling `LaneTaskEnvelope.validate/1` directly, without going through the
 CLI, gets none of this for free and must call
-`resolve_integration_head/1` itself before trusting `integration.base_head`.
+`resolve_integration_head/2` itself before trusting `integration.base_head`.
 
 ## Runtime smoke check
 
