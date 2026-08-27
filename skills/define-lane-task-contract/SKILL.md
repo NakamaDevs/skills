@@ -72,6 +72,7 @@ copy its shape rather than inventing a new one.
    `resolve_writer_paths/1` explicitly in that case. For a v1 migration
    branch, the coordinator must also supply the trusted base revision through
    `LANE_TRUSTED_POLICY_REVISION`. Do not copy this revision from the envelope.
+   The validator disables Git replacement objects for every live Git check.
 5. Run `red_tests` and confirm they fail, then implement, then run
    `green_commands` and confirm they pass. Run `repository_gates` once, at
    handoff — not after every intermediate commit. If `affects_runtime` is

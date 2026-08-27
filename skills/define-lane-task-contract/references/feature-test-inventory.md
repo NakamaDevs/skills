@@ -14,7 +14,7 @@ without a listed test is not a real rule. This is the file
 | `role` must be `"lane"` | "role must be lane" |
 | `owner` non-empty | "owner must be a non-empty string" |
 | `issue` matches `ORG-123` | "issue must match an ORG-123 issue key" |
-| `branch` identity-neutral form and bounded v1 migration | "branch must use an issue-first or v1 migration shape", "branch accepts every Conventional Commit type prefix", "branch accepts well-formed v1 shapes for the required live policy check", "branch rejects malformed v1 shapes", "accepts a v1 branch only when the trusted policy revision allowlists it", "rejects a v1 branch that selects its own allowlisting target" |
+| `branch` identity-neutral form and bounded v1 migration | "branch must use an issue-first or v1 migration shape", "branch accepts every Conventional Commit type prefix", "branch accepts well-formed v1 shapes for the required live policy check", "branch rejects malformed v1 shapes", "accepts a v1 branch only when the trusted policy revision allowlists it", "rejects a v1 branch that selects its own allowlisting target", "rejects a v1 branch when Git replaces the trusted policy commit" |
 | `worktree` absolute path | "worktree must be an absolute path" |
 | `parent_agent` herdr name pattern | "parent_agent must match the herdr agent name pattern" |
 | `result_path` relative, no `..` | "result_path must be relative", "result_path must not traverse out of the worktree" |
@@ -53,7 +53,7 @@ without a listed test is not a real rule. This is the file
 | `deletion_decisions` shape | `describe "deletion_decisions"` |
 | The shipped example envelope itself validates | "accepts the shipped example envelope" |
 | The CLI requires exactly one operand; zero or surplus exits 2 | `describe "the CLI entry point (subprocess)"` |
-| `resolve_integration_head/2` (live git check, NOT part of `validate/1`) resolves `integration.target`/`integration.base_head` in the declared worktree, matches the real merge base, and uses a separately trusted policy revision for v1 branches | `describe "resolve_integration_head/1 (live git verification, not part of validate/1)"` |
+| `resolve_integration_head/2` (live git check, NOT part of `validate/1`) resolves `integration.target`/`integration.base_head` in the declared worktree, matches the real merge base, disables Git replacement objects, and uses a separately trusted policy revision for v1 branches | `describe "resolve_integration_head/1 (live git verification, not part of validate/1)"` |
 | The normal documented CLI (`elixir lane_task_envelope.exs <envelope.json>`) runs `resolve_integration_head/2` too, and rejects an unknown or stale `base_head` in a temporary repository | `describe "the CLI entry point also runs the live integration-head check (temporary repository)"` |
 | `resolve_writer_paths/1` (live, symlink-aware filesystem check, NOT part of `validate/1`) resolves every existing path component's real symlink target and rejects a writer path that lexically stays inside the worktree but escapes through one; accepts normal and `..`-resolving paths with no symlink | `describe "resolve_writer_paths/1 (live, symlink-aware filesystem check; not part of validate/1)"` |
 | The normal documented CLI runs `resolve_writer_paths/1` too, and rejects a symlink-based writer-path escape in a temporary worktree | `describe "the CLI entry point also runs the writer-path symlink check (temporary repository)"` |

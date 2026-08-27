@@ -146,6 +146,7 @@ defmodule LaneTaskEnvelope do
       case System.cmd(
              "git",
              [
+               "--no-replace-objects",
                "-C",
                worktree,
                "rev-parse",
@@ -164,7 +165,7 @@ defmodule LaneTaskEnvelope do
   defp policy_allows?(worktree, policy_commit, branch) do
     case System.cmd(
            "git",
-           ["-C", worktree, "show", "#{policy_commit}:.branch-policy"],
+           ["--no-replace-objects", "-C", worktree, "show", "#{policy_commit}:.branch-policy"],
            stderr_to_stdout: true
          ) do
       {policy, 0} -> branch in legacy_branch_allowlist(policy)
@@ -186,7 +187,9 @@ defmodule LaneTaskEnvelope do
   end
 
   defp commit_exists?(worktree, sha) do
-    case System.cmd("git", ["-C", worktree, "cat-file", "-e", sha <> "^{commit}"],
+    case System.cmd(
+           "git",
+           ["--no-replace-objects", "-C", worktree, "cat-file", "-e", sha <> "^{commit}"],
            stderr_to_stdout: true
          ) do
       {_output, 0} -> true
@@ -195,7 +198,11 @@ defmodule LaneTaskEnvelope do
   end
 
   defp verify_merge_base(worktree, branch, target, base_head) do
-    case System.cmd("git", ["-C", worktree, "merge-base", branch, target], stderr_to_stdout: true) do
+    case System.cmd(
+           "git",
+           ["--no-replace-objects", "-C", worktree, "merge-base", branch, target],
+           stderr_to_stdout: true
+         ) do
       {output, 0} ->
         actual = String.trim(output)
 

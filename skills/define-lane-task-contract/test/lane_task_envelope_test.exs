@@ -364,6 +364,35 @@ defmodule LaneTaskEnvelopeTest do
                )
     end
 
+    test "rejects a v1 branch when Git replaces the trusted policy commit" do
+      repo = init_temp_repo()
+      legacy_branch = "feat/cx/NAK-452-example-work"
+      git!(repo.dir, ["branch", "-m", repo.work_branch, legacy_branch], [])
+      git!(repo.dir, ["checkout", "-q", legacy_branch], [])
+
+      File.write!(
+        Path.join(repo.dir, ".branch-policy"),
+        "LINEAR_TEAM_KEY=NAK\nLINEAR_PROJECT_NAME=Test\n" <>
+          "LEGACY_BRANCH_ALLOWLIST=#{legacy_branch}\n"
+      )
+
+      git_add_and_commit!(repo.dir, ".branch-policy", "self-allow migration branch", [])
+      branch_head = repo.dir |> git!(["rev-parse", legacy_branch], []) |> String.trim()
+      git!(repo.dir, ["replace", repo.main_head_after_advance, branch_head], [])
+
+      envelope =
+        repo
+        |> temp_repo_envelope(branch_head)
+        |> Map.put("branch", legacy_branch)
+        |> put_in(["required_initial_state", "branch"], legacy_branch)
+        |> put_in(["integration", "target"], legacy_branch)
+
+      assert {:error, ["branch is not allowed by the trusted branch policy revision"]} ==
+               LaneTaskEnvelope.resolve_integration_head(envelope,
+                 trusted_policy_revision: repo.main_head_after_advance
+               )
+    end
+
     test "rejects when integration.base_head does not match the actual merge base" do
       repo = init_temp_repo()
       envelope = temp_repo_envelope(repo, repo.main_head_after_advance)

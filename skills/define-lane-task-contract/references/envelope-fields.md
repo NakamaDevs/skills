@@ -73,8 +73,8 @@ forked before the last merge.
 
 For a v1 migration branch, the coordinator supplies
 `LANE_TRUSTED_POLICY_REVISION` separately. The validator reads the migration
-allowlist from that revision. It never trusts `integration.target` for this
-authorization.
+allowlist from that revision. It disables Git replacement objects for the
+read. It never trusts `integration.target` for this authorization.
 
 `LaneTaskEnvelope.validate/1` only checks the *shape* of `integration`
 above — it never touches the filesystem or runs git, by design (see
