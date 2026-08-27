@@ -60,9 +60,22 @@ def fail(message: str, code: int = 1) -> NoReturn:
     raise SystemExit(code)
 
 
-def run_git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+def run_git(
+    *args: str, check: bool = True, isolated: bool = False
+) -> subprocess.CompletedProcess[str]:
+    environment = None
+    if isolated:
+        environment = os.environ.copy()
+        for key in tuple(environment):
+            if key.startswith("GIT_"):
+                environment.pop(key)
     return subprocess.run(
-        ["git", *args], check=check, capture_output=True, text=True, encoding="utf-8"
+        ["git", *args],
+        check=check,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=environment,
     )
 
 
@@ -73,18 +86,51 @@ def repository_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
-def read_policy(root: Path) -> dict[str, str]:
-    path = root / ".branch-policy"
-    if not path.is_file():
-        fail(f"Branch policy error: {path} is missing.")
+def parse_policy(contents: str) -> dict[str, str]:
     policy: dict[str, str] = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in contents.splitlines():
         if "=" in line and not line.lstrip().startswith("#"):
             key, value = line.split("=", 1)
             policy[key.strip()] = value.strip()
     if not policy.get("LINEAR_TEAM_KEY") or not policy.get("LINEAR_PROJECT_NAME"):
         fail("Branch policy error: LINEAR_TEAM_KEY and LINEAR_PROJECT_NAME are required.")
     return policy
+
+
+def read_policy(root: Path) -> dict[str, str]:
+    path = root / ".branch-policy"
+    if not path.is_file():
+        fail(f"Branch policy error: {path} is missing.")
+    return parse_policy(path.read_text(encoding="utf-8"))
+
+
+def read_policy_at_revision(root: Path, revision: str) -> dict[str, str] | None:
+    tree = run_git(
+        "-C",
+        str(root),
+        "ls-tree",
+        "--name-only",
+        revision,
+        "--",
+        ".branch-policy",
+        check=False,
+        isolated=True,
+    )
+    if tree.returncode != 0:
+        fail("PR branch policy error: base commit unavailable; checkout with fetch-depth 2 or greater.")
+    if tree.stdout.strip() != ".branch-policy":
+        return None
+    result = run_git(
+        "-C",
+        str(root),
+        "show",
+        f"{revision}:.branch-policy",
+        check=False,
+        isolated=True,
+    )
+    if result.returncode != 0:
+        fail("PR branch policy error: could not read .branch-policy from the base commit.")
+    return parse_policy(result.stdout)
 
 
 def policy_branches(policy: dict[str, str], key: str) -> set[str]:
@@ -198,13 +244,11 @@ def command_pr_branch(_: argparse.Namespace) -> None:
         return
     if not base:
         fail("PR branch policy error: base commit unavailable; checkout with fetch-depth 2 or greater.")
-    result = run_git("ls-tree", "--name-only", base, "--", ".branch-policy", check=False)
-    if result.returncode != 0:
-        fail("PR branch policy error: base commit unavailable; checkout with fetch-depth 2 or greater.")
-    if result.stdout.strip() != ".branch-policy":
+    policy = read_policy_at_revision(repository_root(), base)
+    if policy is None:
         print("PR branch policy bootstrap: the base predates .branch-policy; enforcement begins after merge.")
         return
-    error = validate_branch_format(head, read_policy(repository_root()))
+    error = validate_branch_format(head, policy)
     if error:
         fail(error)
 
@@ -560,6 +604,51 @@ def command_supply_chain(_: argparse.Namespace) -> None:
     print("Supply-chain policy checks passed.")
 
 
+def verify_base_policy_lookup() -> None:
+    with tempfile.TemporaryDirectory(prefix="nakama-policy-test-") as directory:
+        root = Path(directory)
+        hooks = root / ".empty-hooks"
+        hooks.mkdir()
+        run_git("-C", directory, "init", "-q", isolated=True)
+        run_git(
+            "-C", directory, "config", "core.hooksPath", str(hooks), isolated=True
+        )
+        run_git("-C", directory, "config", "user.name", "Test", isolated=True)
+        run_git(
+            "-C", directory, "config", "user.email", "test@example.com", isolated=True
+        )
+        policy_path = root / ".branch-policy"
+        policy_path.write_text(
+            "LINEAR_TEAM_KEY=NAK\nLINEAR_PROJECT_NAME=Test\nPROTECTED_BRANCHES=main\n"
+            "LEGACY_BRANCH_ALLOWLIST=\n",
+            encoding="utf-8",
+        )
+        run_git("-C", directory, "add", ".branch-policy", isolated=True)
+        run_git(
+            "-C",
+            directory,
+            "commit",
+            "-q",
+            "-m",
+            "test: seed policy",
+            isolated=True,
+        )
+        base = run_git(
+            "-C", directory, "rev-parse", "HEAD", isolated=True
+        ).stdout.strip()
+        legacy_branch = "feature/cx/NAK-5-branch-governance"
+        policy_path.write_text(
+            "LINEAR_TEAM_KEY=NAK\nLINEAR_PROJECT_NAME=Test\nPROTECTED_BRANCHES=main\n"
+            f"LEGACY_BRANCH_ALLOWLIST={legacy_branch}\n",
+            encoding="utf-8",
+        )
+        trusted_policy = read_policy_at_revision(root, base)
+        if trusted_policy is None or legacy_branch in policy_branches(
+            trusted_policy, "LEGACY_BRANCH_ALLOWLIST"
+        ):
+            fail("Self-test failed: the PR branch gate trusted the head allowlist.")
+
+
 def command_self_test(_: argparse.Namespace) -> None:
     policy = read_policy(repository_root())
     passing = (
@@ -592,6 +681,7 @@ def command_self_test(_: argparse.Namespace) -> None:
         fail("Self-test failed: an allowlisted legacy branch was rejected.")
     if validate_branch_format("feature/cx/NAK-6-other-work", migration_policy) is None:
         fail("Self-test failed: an unlisted legacy branch was accepted.")
+    verify_base_policy_lookup()
     valid_messages = (
         "feat: add branch policy",
         "fix(hooks): reject missing Linear issues",

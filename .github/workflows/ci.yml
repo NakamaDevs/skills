@@ -17,6 +17,9 @@ env:
   MISE_ERLANG_COMPILE: "true"
   MISE_LOCKED: "1"
   MISE_TASK_RUN_AUTO_INSTALL: "false"
+  PR_BASE_REVISION: ${{ github.event.pull_request.base.sha || 'HEAD^1' }}
+  PR_HEAD_BRANCH: ${{ github.event.pull_request.head.ref || '' }}
+  PR_TITLE: ${{ github.event.pull_request.title || '' }}
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
