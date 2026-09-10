@@ -560,24 +560,25 @@ def command_supply_chain(_: argparse.Namespace) -> None:
 
 def command_self_test(_: argparse.Namespace) -> None:
     policy = read_policy(repository_root())
+    team = policy["LINEAR_TEAM_KEY"]
     passing = (
-        "feature/hectorddmx-NAK-5-branch-governance",
-        "fix/hector-dd-NAK-5-branch-governance",
-        "feature/cx/NAK-5-branch-governance",
-        "fix/cx/NAK-5-branch-governance",
-        "feat/cx/NAK-5-branch-governance",
-        "docs/cx/NAK-5-branch-governance",
-        "chore/hectorddmx-NAK-5-branch-governance",
-        "revert/cx/NAK-5-branch-governance",
+        f"feature/hectorddmx-{team}-5-branch-governance",
+        f"fix/hector-dd-{team}-5-branch-governance",
+        f"feature/cx/{team}-5-branch-governance",
+        f"fix/cx/{team}-5-branch-governance",
+        f"feat/cx/{team}-5-branch-governance",
+        f"docs/cx/{team}-5-branch-governance",
+        f"chore/hectorddmx-{team}-5-branch-governance",
+        f"revert/cx/{team}-5-branch-governance",
         "main",
     )
     failing = (
-        "feature/NAK-5-branch-governance",
-        "fix/cx/hectorddmx-NAK-5-branch-governance",
+        f"feature/{team}-5-branch-governance",
+        f"fix/cx/hectorddmx-{team}-5-branch-governance",
         "feature/cx/missing-ticket",
-        "chores/hectorddmx-NAK-5-branch-governance",
-        "release/cx/NAK-5-branch-governance",
-        "fix/cx/nak-5-branch-governance",
+        f"chores/hectorddmx-{team}-5-branch-governance",
+        f"release/cx/{team}-5-branch-governance",
+        f"fix/cx/{team.lower()}-5-branch-governance",
     )
     if any(validate_branch_format(value, policy) for value in passing):
         fail("Self-test failed: a valid branch was rejected.")

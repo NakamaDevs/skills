@@ -10,7 +10,7 @@ source = "https://github.com/NakamaDevs/skills.git"
 revision = "self"
 
 [linear]
-team = "NAK"
+team = "DOC"
 project = "Codex Skills"
 
 [quality]
