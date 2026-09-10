@@ -10,7 +10,7 @@ source = "https://github.com/NakamaDevs/skills.git"
 revision = "REPLACE_WITH_EXACT_SKLLS_COMMIT_SHA"
 
 [linear]
-team = "NAK"
+team = "REPLACE_ME"
 project = "Example"
 
 [quality]

@@ -2,7 +2,7 @@
 
 ## Linear issue
 
-<!-- Use Fixes NAK-123 or Refs NAK-123. -->
+<!-- Use Fixes DOC-123 or Refs DOC-123. -->
 
 ## Research, plan, and changes
 
