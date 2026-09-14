@@ -8,7 +8,7 @@ repos:
     hooks:
       - id: governance-branch-name
         name: Validate Linear branch format
-        entry: python scripts/nakama_governance.py branch --format-only
+        entry: python3 .nakama/kaicho_delivery.py branch --format-only
         language: system
         pass_filenames: false
         always_run: true
@@ -33,3 +33,11 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-push]
+
+  - repo: local
+    hooks:
+      - id: kaicho-delivery-reference
+        name: Kaicho v2.1 semantic commit and Linear reference
+        entry: python3 .nakama/kaicho_delivery.py commit
+        language: system
+        stages: [commit-msg]
