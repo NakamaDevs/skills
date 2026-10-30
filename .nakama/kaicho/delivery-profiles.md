@@ -118,3 +118,12 @@ an explicitly authorized deployment path; merging alone does not prove deploymen
   magic words, integration setup and PR linking.
 - [GitHub workflow skipping](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/skip-workflow-runs): supported events and pending required checks.
 - [GitHub rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets): branch protections and bypass behavior.
+
+
+## Ticket keys without a team allowlist
+
+A ticket reference remains required. Accept any syntactically valid key, such as
+`ABC-123` or `DOC-456`; do not restrict keys to the repository's owning team.
+Keep ticket existence checks where already configured, and retain the existing
+project check. Team ownership metadata is descriptive, not a prefix allowlist.
+Missing tickets, malformed identifiers, and broken references remain failures.
