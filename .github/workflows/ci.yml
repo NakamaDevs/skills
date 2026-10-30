@@ -24,21 +24,21 @@ jobs:
     name: Verify repository
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     # nakama-workload: server-only
-    runs-on: >-
-      ${{
-        github.event_name == 'pull_request' &&
-        github.event.pull_request.user.login == 'dependabot[bot]' &&
-        'nakama-dependabot-linux-x64' ||
-        'nakama-linux-x64'
-      }}
+    # Public repository: use GitHub-hosted Linux, including Dependabot.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Install Erlang for the locked Elixir runtime
+        uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
+        with:
+          otp-version: '28.4.1'
+          version-type: strict
       - uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           version: 2026.7.17
           cache: false
-          install_args: actionlint gitleaks python
+          install_args: actionlint elixir gitleaks python
       - run: mise run verify
