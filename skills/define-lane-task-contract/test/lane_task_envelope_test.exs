@@ -289,7 +289,8 @@ defmodule LaneTaskEnvelopeTest do
     end
 
     test "rejects when integration.base_head does not exist in the worktree" do
-      envelope = put_in(@valid, ["integration", "base_head"], String.duplicate("0", 40))
+      repo = init_temp_repo()
+      envelope = temp_repo_envelope(repo, String.duplicate("0", 40))
       assert {:error, [error]} = LaneTaskEnvelope.resolve_integration_head(envelope)
       assert error =~ "does not exist in the worktree"
     end
