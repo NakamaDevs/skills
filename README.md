@@ -41,6 +41,25 @@ Set `SKILLS_AGENTS` to a space-separated agent list.
 
 ## Structure
 
+### Conversational working documents
+
+Use [`write-colleague-notes`](skills/write-colleague-notes/SKILL.md) for role
+questions, discovery notes, handoffs, and team updates that should read like a
+note to a colleague. It keeps the facts and open questions while removing
+report framing, marketing language, repetitive summaries, and em dashes.
+
+```sh
+npx skills add NakamaDevs/skills --skill write-colleague-notes --global --agent codex --yes
+```
+
+Ask: “Use $write-colleague-notes to rewrite this as a note to the team.”
+
+Use `nakama-write-plain-language` when the main need is Simplified Technical
+English. Use `write-colleague-notes` when the main need is a conversational voice
+and a less formal document structure.
+
+### Skill layout
+
 Every skill uses this layout:
 
 ```text
