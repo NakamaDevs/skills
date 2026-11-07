@@ -58,6 +58,19 @@ Use `nakama-write-plain-language` when the main need is Simplified Technical
 English. Use `write-colleague-notes` when the main need is a conversational voice
 and a less formal document structure.
 
+### Open Chrome in a specific profile (macOS)
+
+Use [`open-chrome-profile`](skills/open-chrome-profile/SKILL.md) to open a URL in
+the Chrome profile signed in with a given email. `-n` is required; without it,
+macOS drops the profile flag when Chrome is already running.
+
+```sh
+open -na "Google Chrome" --args --profile-email=user@example.com "https://example.com/"
+npx skills add NakamaDevs/skills --skill open-chrome-profile --global --agent codex --yes
+```
+
+Ask: "Use $open-chrome-profile to open https://example.com/ in the Chrome profile for user@example.com."
+
 ### Skill layout
 
 Every skill uses this layout:

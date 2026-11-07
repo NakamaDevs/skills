@@ -1,0 +1,4 @@
+interface:
+  display_name: "Open Chrome profile"
+  short_description: "Open a URL in a chosen Chrome profile on macOS"
+  default_prompt: "Use $open-chrome-profile to open https://example.com/ in the Chrome profile for user@example.com."
