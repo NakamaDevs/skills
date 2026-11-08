@@ -1,0 +1,6 @@
+interface:
+  display_name: "Nakama Investigate Patterns"
+  short_description: "Write one sourced research note"
+  default_prompt: "Use $nakama-investigate-patterns to research this question against primary sources and write a dated note under research/ with a sources table."
+policy:
+  allow_implicit_invocation: false

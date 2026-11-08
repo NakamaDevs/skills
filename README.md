@@ -41,6 +41,64 @@ Set `SKILLS_AGENTS` to a space-separated agent list.
 
 ## Structure
 
+### Conversational working documents
+
+Use [`write-colleague-notes`](skills/write-colleague-notes/SKILL.md) for role
+questions, discovery notes, handoffs, and team updates that should read like a
+note to a colleague. It keeps the facts and open questions while removing
+report framing, marketing language, repetitive summaries, and em dashes.
+
+```sh
+npx skills add NakamaDevs/skills --skill write-colleague-notes --global --agent codex --yes
+```
+
+Ask: “Use $write-colleague-notes to rewrite this as a note to the team.”
+
+Use `nakama-write-plain-language` when the main need is Simplified Technical
+English. Use `write-colleague-notes` when the main need is a conversational voice
+and a less formal document structure.
+
+### Software factory roles
+
+The software factory is the NakamaDevs agent organization: a Director, program
+managers, a quality and process engineer, a delivery automation manager, an
+allowance manager, and an investigator. Start with
+[`nakama-run-software-factory`](skills/nakama-run-software-factory/SKILL.md).
+It names every role skill and the deterministic tools in the workspace
+repository.
+
+Each role skill ships its Claude Code agent definition at
+`assets/claude-agent.md`. Install them globally with `npx skills add`, then run `mise run factory:agents`
+in the workspace to link `~/.claude/agents/<name>.md` to the installed assets.
+Codex invokes the skill by name.
+
+```sh
+npx skills add NakamaDevs/skills \
+  --skill nakama-run-software-factory \
+  --skill nakama-direct-software-factory \
+  --skill nakama-manage-program \
+  --skill nakama-engineer-quality-process \
+  --skill nakama-automate-delivery \
+  --skill nakama-manage-allowances \
+  --skill nakama-investigate-patterns \
+  --global --agent codex --agent claude-code --yes
+```
+
+### Open Chrome in a specific profile (macOS)
+
+Use [`open-chrome-profile`](skills/open-chrome-profile/SKILL.md) to open a URL in
+the Chrome profile signed in with a given email. `-n` is required; without it,
+macOS drops the profile flag when Chrome is already running.
+
+```sh
+open -na "Google Chrome" --args --profile-email=user@example.com "https://example.com/"
+npx skills add NakamaDevs/skills --skill open-chrome-profile --global --agent codex --yes
+```
+
+Ask: "Use $open-chrome-profile to open https://example.com/ in the Chrome profile for user@example.com."
+
+### Skill layout
+
 Every skill uses this layout:
 
 ```text

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Nakama Manage Program"
+  short_description: "Manage one team's cycle, idle work, and delegation"
+  default_prompt: "Use $nakama-manage-program for team <KEY>: run factory:status for the team, propose cycle goals, and clean the idle started work."
+policy:
+  allow_implicit_invocation: false
