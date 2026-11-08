@@ -1,3 +1,9 @@
+# Git hooks export repository-local variables. Remove them before any fixture
+# or CLI subprocess runs so each temporary repository uses its own Git state.
+# This changes only this test process, not the calling hook or the user's shell.
+{git_local_env, 0} = System.cmd("git", ["rev-parse", "--local-env-vars"])
+git_local_env |> String.split("\n", trim: true) |> Enum.each(&System.delete_env/1)
+
 ExUnit.start()
 
 # lane_task_envelope.exs exits 2 when its own CLI sees zero or surplus
@@ -17,6 +23,12 @@ defmodule LaneTaskEnvelopeTest do
     case LaneTaskEnvelope.validate(envelope) do
       :ok -> []
       {:error, errors} -> errors
+    end
+  end
+
+  test "does not inherit Git hook repository variables" do
+    for name <- ~w(GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES) do
+      assert System.get_env(name) == nil, "#{name} must not reach temporary repositories"
     end
   end
 
