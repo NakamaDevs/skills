@@ -1,9 +1,9 @@
 {
   "role": "lane",
-  "owner": "hdb",
+  "owner": "lane-owner",
   "issue": "NAK-452",
-  "branch": "feat/cx/nak-452-enforceable-local-coordinator-agent",
-  "worktree": "/Users/hdb/.herdr/worktrees/skills/feat-cx-nak-452-enforceable-local-coordinator-agent",
+  "branch": "feat/NAK-452-enforceable-local-coordinator-agent",
+  "worktree": "/workspace/skills/feat-NAK-452-enforceable-local-coordinator-agent",
   "parent_task": "kantoku-m0-proven-loop",
   "parent_agent": "kantoku-assurance-coord",
   "result_path": "results/nak-452-slice-2.json",
@@ -12,7 +12,7 @@
   "panes": 1,
   "delegation_allowed": false,
   "required_initial_state": {
-    "branch": "feat/cx/nak-452-enforceable-local-coordinator-agent",
+    "branch": "feat/NAK-452-enforceable-local-coordinator-agent",
     "clean_worktree": true,
     "base_ref": "main"
   },

@@ -7,7 +7,7 @@ description: Review Kantoku Windows 10/11 x64 tray, runner-service control, .NET
 
 Review only the final Windows-related diff unless a cross-stack contract requires wider context.
 
-1. Read `AGENTS.md`, `.governance/engineering-v1.md`, and the affected Windows files.
+1. Read `AGENTS.md`, `.governance/engineering-v2.md`, `.governance/privacy.md`, and the affected Windows files.
 2. Confirm every Kantoku Windows job selects `nakama-windows-x64`. Reject use of `nakama-windows-arm64`, GitHub-hosted runners, or an unscoped `self-hosted` label.
 3. Require an explicit rollout guard until an x64 runner is provisioned and online.
 4. Keep the tray local and credential-free. It may inspect or control only allowlisted `actions.runner.NakamaDevs.*` Windows services and must not accept shell text.
