@@ -1,0 +1,4 @@
+interface:
+  display_name: "Write colleague notes"
+  short_description: "Turn formal drafts into natural working notes"
+  default_prompt: "Use $write-colleague-notes to rewrite this document as a natural note to a colleague, keeping the facts and open questions intact."
