@@ -60,5 +60,6 @@ a project with no target date, no initiative, or no owner as a gap.
 
 ## Claude Code agent
 
-`assets/claude-agent.md` is the Claude Code definition. Install it with
-`mise run factory:agents` in the workspace, then run `claude --agent director`.
+`assets/claude-agent.md` is the Claude Code definition. After the global
+install, `mise run factory:agents` links it and `mise run factory:director`
+starts it. With Codex: `mise run factory:director -- codex`.

@@ -29,8 +29,9 @@ the tools and the records under `factory/`.
 | Developer | `$nakama-deliver-change` | a manager |
 
 Each role skill ships its Claude Code agent definition at
-`assets/claude-agent.md`. The workspace installs them with
-`mise run factory:agents`. Codex users invoke the skill by name.
+`assets/claude-agent.md`. Install the skills globally with `npx skills add`, then run
+`mise run factory:agents` in the workspace to link `~/.claude/agents/<name>.md`
+to the installed assets. Codex users invoke the skill by name.
 
 ## Rules every role follows
 
@@ -55,7 +56,8 @@ Run these in the workspace repository:
 | `mise run factory:brief` | Write today's brief to `factory/briefs/<date>.md` |
 | `mise run factory:allowances` | Token use, reset windows, unused allowance from local logs |
 | `mise run factory:open` | Open or reuse the `nakamadevs-factory` Rex session, one tab per agent |
-| `mise run factory:agents` | Install the agent definitions from this catalog into `.claude/agents/` |
+| `mise run factory:agents` | Link `~/.claude/agents/<name>.md` to the globally installed assets of this catalog |
+| `mise run factory:director` | Start the Director with Claude Code, or with Codex after `-- codex` |
 
 `factory:status` needs `LINEAR_API_KEY` and a logged-in `gh`.
 `factory:allowances` reads local logs only and never a credential.

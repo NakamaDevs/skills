@@ -68,8 +68,9 @@ It names every role skill and the deterministic tools in the workspace
 repository.
 
 Each role skill ships its Claude Code agent definition at
-`assets/claude-agent.md`. The workspace installs them with
-`mise run factory:agents`. Codex invokes the skill by name.
+`assets/claude-agent.md`. Install them globally with `npx skills add`, then run `mise run factory:agents`
+in the workspace to link `~/.claude/agents/<name>.md` to the installed assets.
+Codex invokes the skill by name.
 
 ```sh
 npx skills add NakamaDevs/skills \
