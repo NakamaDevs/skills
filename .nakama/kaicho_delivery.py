@@ -21,7 +21,7 @@ def message_error(text):
 def branch_error(branch, profile):
     if branch in [profile['default_branch'], *profile.get('existing_branches', [])]:
         return None
-    if re.fullmatch(rf'({TYPES}|feature)/[A-Z][A-Z0-9]*-[1-9][0-9]*-[a-z0-9][a-z0-9-]*', branch):
+    if re.fullmatch(rf'({TYPES}|feature)/[A-Z][A-Z0-9]*-[1-9][0-9]*-[a-z0-9]+(?:-[a-z0-9]+)*', branch):
         return None
     return 'Use type/TEAM-123-description. Existing published branches remain valid.'
 

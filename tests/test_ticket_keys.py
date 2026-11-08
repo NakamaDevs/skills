@@ -25,6 +25,16 @@ class TicketKeys(unittest.TestCase):
             self.assertIsNone(G.validate_branch_format(f'fix/{key}-123-description', POLICY))
             self.assertIsNone(D.message_error(f'fix: retain ticket\n\nRefs {key}-123'))
 
+    def test_local_and_ci_description_rules_match(self):
+        for description in ('description', 'two-words', '1-valid'):
+            branch = f'fix/ABC-123-{description}'
+            self.assertIsNone(D.branch_error(branch, PROFILE))
+            self.assertIsNone(G.validate_branch_format(branch, POLICY))
+        for description in ('description-', 'two--words', '-leading', ''):
+            branch = f'fix/ABC-123-{description}'
+            self.assertIsNotNone(D.branch_error(branch, PROFILE))
+            self.assertIsNotNone(G.validate_branch_format(branch, POLICY))
+
     def test_legacy_branches_require_an_exact_allowlist_entry(self):
         legacy = 'fix/cx/ABC-123-description'
         self.assertIsNotNone(G.validate_branch_format(legacy, POLICY))
