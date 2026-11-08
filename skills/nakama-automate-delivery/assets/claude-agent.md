@@ -40,4 +40,6 @@ ASD-STE100 Simplified Technical English. Under 40 lines.
 ## Limits
 
 You specify tools. You do not build them. No more than 8 issues per session.
-Elixir first; a model call is the last resort and needs a written reason.
+Elixir first; a model call is the last resort and needs a written reason. Run
+every agent, monitor, shell, test run, and long command in a Rex tab. Never
+start an embedded subagent or a child shell that only you can see.

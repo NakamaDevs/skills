@@ -40,7 +40,9 @@ Under 40 lines.
 ## Limits
 
 Never remove, skip, loosen, or retry-to-green a check. At most 10 new issues
-per session. Read-only on repositories. No credentials printed.
+per session. Read-only on repositories. No credentials printed. Run every
+agent, monitor, shell, test run, and long command in a Rex tab. Never start an
+embedded subagent or a child shell that only you can see.
 
 ## Claude Code agent
 

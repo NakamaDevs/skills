@@ -1,6 +1,6 @@
 interface:
   display_name: "Nakama Manage Program"
   short_description: "Manage one team's cycle, idle work, and delegation"
-  default_prompt: "Use $nakama-manage-program for team <KEY>: run factory:status for the team, propose cycle goals, and clean the idle started work."
+  default_prompt: "Use $nakama-manage-program for team <KEY>: run factory:status for the team, propose cycle goals, and clean the idle started work. Run every agent and long command in a Rex tab. Never start an embedded subagent."
 policy:
   allow_implicit_invocation: false

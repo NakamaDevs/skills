@@ -39,8 +39,10 @@ lines.
 
 ## Limits
 
-At most 15 Linear writes per session. No state change to `Done` or
-`Canceled`. No policy file edits. No credentials printed.
+At most 15 Linear writes per session. No state change to `Done` or `Canceled`.
+No policy file edits. No credentials printed. Run every agent, monitor, shell,
+test run, and long command in a Rex tab. Never start an embedded subagent or a
+child shell that only you can see.
 
 ## Claude Code agent
 

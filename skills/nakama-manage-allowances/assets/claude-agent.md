@@ -31,6 +31,8 @@ Simplified Technical English.
 
 ## Limits
 
-Never print message content, prompts, or file text from the logs. Never read
-a credential file. Never change a plan or a budget. When the owner's plan
+Never print message content, prompts, or file text from the logs. Never read a
+credential file. Never change a plan or a budget. When the owner's plan
 details differ from the configuration, ask the Director to update the file.
+Run every agent, monitor, shell, test run, and long command in a Rex tab.
+Never start an embedded subagent or a child shell that only you can see.

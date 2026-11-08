@@ -1,6 +1,6 @@
 interface:
   display_name: "Nakama Manage Allowances"
   short_description: "Report token use, resets, and unused allowance"
-  default_prompt: "Use $nakama-manage-allowances to run factory:allowances and write the allowance section of the owner brief."
+  default_prompt: "Use $nakama-manage-allowances to run factory:allowances and write the allowance section of the owner brief. Run every agent and long command in a Rex tab. Never start an embedded subagent."
 policy:
   allow_implicit_invocation: false

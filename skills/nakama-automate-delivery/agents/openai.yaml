@@ -1,6 +1,6 @@
 interface:
   display_name: "Nakama Automate Delivery"
   short_description: "Specify deterministic tools for repeated manual work"
-  default_prompt: "Use $nakama-automate-delivery to find manual status work and model calls a script can replace, record the loss, and specify each tool as a Linear issue."
+  default_prompt: "Use $nakama-automate-delivery to find manual status work and model calls a script can replace, record the loss, and specify each tool as a Linear issue. Run every agent and long command in a Rex tab. Never start an embedded subagent."
 policy:
   allow_implicit_invocation: false
