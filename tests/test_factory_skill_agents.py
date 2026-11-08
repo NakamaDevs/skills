@@ -48,6 +48,16 @@ class FactorySkillAgentTests(unittest.TestCase):
             self.assertIn("$nakama-run-software-factory", text, skill)
             self.assertIn("assets/claude-agent.md", text, skill)
 
+    def test_frontmatter_scalars_have_no_unquoted_colon(self) -> None:
+        # The skills CLI parses frontmatter as YAML. An unquoted ": " inside
+        # a value is a nested mapping and the skill is skipped at install.
+        for skill in [*ROLE_SKILLS, "nakama-run-software-factory"]:
+            front = frontmatter(SKILLS / skill / "SKILL.md")
+            for line in front.splitlines():
+                key, _, value = line.partition(": ")
+                if key in {"name", "description"} and not value.startswith(('"', "'")):
+                    self.assertNotIn(": ", value, f"{skill}: unquoted colon in {key}")
+
     def test_no_role_may_merge_or_deploy(self) -> None:
         text = (SKILLS / "nakama-run-software-factory" / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn("No role merges, releases, deploys, or spends.", text)

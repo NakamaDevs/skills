@@ -1,6 +1,6 @@
 ---
 name: nakama-run-software-factory
-description: Run the NakamaDevs software factory: the Director and manager agents, the deterministic status and allowance tools, the four-section owner brief, the two cadences, and loss accounting. Use when starting a factory session, reading or writing an owner brief, cascading an owner decision, or deciding which factory role handles a task. The factory covers the NakamaDevs organization only.
+description: Run the NakamaDevs software factory with the Director and manager agents, the deterministic status and allowance tools, the four-section owner brief, the two cadences, and loss accounting. Use when starting a factory session, reading or writing an owner brief, cascading an owner decision, or deciding which factory role handles a task. The factory covers the NakamaDevs organization only.
 ---
 
 # Nakama Run Software Factory
