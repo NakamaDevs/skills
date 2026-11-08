@@ -58,6 +58,32 @@ Use `nakama-write-plain-language` when the main need is Simplified Technical
 English. Use `write-colleague-notes` when the main need is a conversational voice
 and a less formal document structure.
 
+### Software factory roles
+
+The software factory is the NakamaDevs agent organization: a Director, program
+managers, a quality and process engineer, a delivery automation manager, an
+allowance manager, and an investigator. Start with
+[`nakama-run-software-factory`](skills/nakama-run-software-factory/SKILL.md).
+It names every role skill and the deterministic tools in the workspace
+repository.
+
+Each role skill ships its Claude Code agent definition at
+`assets/claude-agent.md`. Install them globally with `npx skills add`, then run `mise run factory:agents`
+in the workspace to link `~/.claude/agents/<name>.md` to the installed assets.
+Codex invokes the skill by name.
+
+```sh
+npx skills add NakamaDevs/skills \
+  --skill nakama-run-software-factory \
+  --skill nakama-direct-software-factory \
+  --skill nakama-manage-program \
+  --skill nakama-engineer-quality-process \
+  --skill nakama-automate-delivery \
+  --skill nakama-manage-allowances \
+  --skill nakama-investigate-patterns \
+  --global --agent codex --agent claude-code --yes
+```
+
 ### Open Chrome in a specific profile (macOS)
 
 Use [`open-chrome-profile`](skills/open-chrome-profile/SKILL.md) to open a URL in
