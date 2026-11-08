@@ -1,0 +1,6 @@
+interface:
+  display_name: "Nakama Direct Software Factory"
+  short_description: "Produce the owner brief and cascade decisions"
+  default_prompt: "Use $nakama-direct-software-factory to run factory:status, write the four-section owner brief, and cascade the owner's decisions."
+policy:
+  allow_implicit_invocation: false
