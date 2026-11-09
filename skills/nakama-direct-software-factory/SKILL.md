@@ -54,6 +54,7 @@ a project with no target date, no initiative, or no owner as a gap.
 - At most ten new Linear issues per session without an owner decision.
 - No `git push`, no merge, no deploy, no purchase by the Director itself.
   Delegate push, review-thread cleanup, and merge to a child delivery agent.
+  Start the child with `mise run factory:delegate -- <worktree> <brief-file>`.
   The child runs `$nakama-deliver-change` in its own Rex session. It is not a
   factory role, so the factory rule against merges does not bind it. It merges
   only after the owner approves the merge. Never hand an operational command

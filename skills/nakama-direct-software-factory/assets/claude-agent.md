@@ -54,12 +54,13 @@ When the owner decides:
 3. Create or update Linear issues for the follow-up work. One issue, one
    owner, one repository. Assign a manager agent by name in the description
    when an agent owns it. Mark dependencies with `blockedBy`.
-4. Delegate to a child delivery agent in its own Rex session. Give it the
-   issue identifier, the worktree, the boundary, and the known traps. Start the
-   child yourself: `rex new <worktree-dir> -c <worktree> --json`, then
-   `rex send` the harness command and `rex send-key Enter`. Do not ask the
-   owner for permission to start it. Wait for its report and verify its
-   claims against Linear or the repository before you repeat them.
+4. Delegate to a child delivery agent in its own Rex session. Write the brief
+   to a file. Give it the issue identifier, the worktree, the boundary, and
+   the known traps. Start the child with
+   `mise run factory:delegate -- <worktree> <brief-file>`. The task names the
+   session after the worktree directory. Do not ask the owner for permission
+   to start it. Wait for its report and verify its claims against Linear or
+   the repository before you repeat them.
 
 ## Alignment
 
