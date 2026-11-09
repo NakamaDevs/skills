@@ -1,3 +1,6 @@
 LINEAR_TEAM_KEY=NAK
 LINEAR_PROJECT_NAME=Codex Skills
 PROTECTED_BRANCHES=main
+# Exact v1 branch names that were open when this repository adopted v2.
+# Remove each entry after its pull request closes. Do not add new branches.
+LEGACY_BRANCH_ALLOWLIST=

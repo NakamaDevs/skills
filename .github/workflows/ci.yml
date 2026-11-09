@@ -14,6 +14,9 @@ permissions:
 env:
   MISE_LOCKED: "1"
   MISE_TASK_RUN_AUTO_INSTALL: "false"
+  PR_BASE_REVISION: ${{ github.event.pull_request.base.sha || 'HEAD^1' }}
+  PR_HEAD_BRANCH: ${{ github.event.pull_request.head.ref || '' }}
+  PR_TITLE: ${{ github.event.pull_request.title || '' }}
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -23,7 +26,7 @@ jobs:
   verify:
     name: Verify repository
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
-    # nakama-workload: server-only
+    # nakama-workload: portable-non-server
     # Public repository: use GitHub-hosted Linux, including Dependabot.
     runs-on: ubuntu-24.04
     steps:
@@ -31,14 +34,14 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Install Erlang for the locked Elixir runtime
-        uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
-        with:
-          otp-version: '28.4.1'
-          version-type: strict
+      - name: Isolate Mise runtime state
+        shell: bash
+        run: |
+          echo "MISE_DATA_DIR=${RUNNER_TEMP}/mise-data-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_ENV}"
+          echo "MISE_CACHE_DIR=${RUNNER_TEMP}/mise-cache-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_ENV}"
       - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
         with:
           version: 2026.7.17
           cache: false
-          install_args: actionlint elixir gitleaks python
+          install_args: actionlint erlang elixir gitleaks python
       - run: mise run verify

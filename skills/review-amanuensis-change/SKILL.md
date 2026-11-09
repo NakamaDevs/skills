@@ -7,7 +7,7 @@ description: Route Amanuensis pull-request review across Flutter/Dart, Swift/mac
 
 ## Route
 
-1. Read `AGENTS.md`, `.governance/engineering-v1.md`, and the final base/head diff.
+1. Read `AGENTS.md`, `.governance/engineering-v2.md`, `.governance/privacy.md`, and the final base/head diff.
 2. For `app/lib`, `app/test`, or `app/integration_test`, invoke `$review-amanuensis-flutter`.
 3. For `app/macos` or Swift changes, invoke `$review-amanuensis-macos`.
 4. For `app/windows`, C++, or CMake changes, invoke `$review-amanuensis-windows`.

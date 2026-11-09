@@ -19,16 +19,32 @@ PROFILE = {'default_branch': 'main'}
 POLICY = {'LINEAR_TEAM_KEY':'NAK', 'LINEAR_PROJECT_NAME':'Synthetic Project', 'PROTECTED_BRANCHES':'main'}
 
 class TicketKeys(unittest.TestCase):
-    def test_distinct_keys_keep_existing_branch_layouts(self):
+    def test_distinct_keys_use_identity_neutral_branches(self):
         for key in ('ABC', 'DOC', 'QA2', 'Z'):
             self.assertIsNone(D.branch_error(f'fix/{key}-123-description', PROFILE))
-            self.assertIsNone(G.validate_branch_format(f'fix/cx/{key}-123-description', POLICY))
+            self.assertIsNone(G.validate_branch_format(f'fix/{key}-123-description', POLICY))
             self.assertIsNone(D.message_error(f'fix: retain ticket\n\nRefs {key}-123'))
+
+    def test_local_and_ci_description_rules_match(self):
+        for description in ('description', 'two-words', '1-valid'):
+            branch = f'fix/ABC-123-{description}'
+            self.assertIsNone(D.branch_error(branch, PROFILE))
+            self.assertIsNone(G.validate_branch_format(branch, POLICY))
+        for description in ('description-', 'two--words', '-leading', ''):
+            branch = f'fix/ABC-123-{description}'
+            self.assertIsNotNone(D.branch_error(branch, PROFILE))
+            self.assertIsNotNone(G.validate_branch_format(branch, POLICY))
+
+    def test_legacy_branches_require_an_exact_allowlist_entry(self):
+        legacy = 'fix/cx/ABC-123-description'
+        self.assertIsNotNone(G.validate_branch_format(legacy, POLICY))
+        self.assertIsNone(G.validate_branch_format(legacy, POLICY | {'LEGACY_BRANCH_ALLOWLIST': legacy}))
+        self.assertIsNotNone(G.validate_branch_format('fix/cx/ABC-124-other', POLICY | {'LEGACY_BRANCH_ALLOWLIST': legacy}))
 
     def test_missing_and_malformed_references_fail(self):
         for ticket in ('', 'ABC', 'ABC-', 'ABC-0', 'ABC-01', 'ABC-one', '123-4', 'İ-123', 'KEY-123'):
             self.assertIsNotNone(D.branch_error(f'fix/{ticket}-description', PROFILE))
-            self.assertIsNotNone(G.validate_branch_format(f'fix/cx/{ticket}-description', POLICY))
+            self.assertIsNotNone(G.validate_branch_format(f'fix/{ticket}-description', POLICY))
             self.assertIsNotNone(D.message_error(f'fix: retain ticket\n\nRefs {ticket}'))
         for suffix in ('garbage', '.5', '/other', '_tail', '-extra'):
             self.assertIsNotNone(D.message_error(f'fix: retain ticket\n\nRefs ABC-123{suffix}'))
@@ -39,12 +55,12 @@ class TicketKeys(unittest.TestCase):
         def result(issue):
             return io.BytesIO(json.dumps({'data':{'issue':issue}}).encode())
         with patch.object(G.urllib.request, 'urlopen', return_value=result(valid)) as query:
-            G.linear_issue('fix/cx/ABC-123-description', POLICY, 'synthetic-fixture', 'https://example.invalid/graphql')
+            G.linear_issue('fix/ABC-123-description', POLICY, 'synthetic-fixture', 'https://example.invalid/graphql')
             self.assertEqual(json.loads(query.call_args.args[0].data)['variables']['id'], 'ABC-123')
         for issue in (None, valid | {'identifier':'ABC-124'}, valid | {'project':{'name':'Other Project'}}):
             with patch.object(G.urllib.request, 'urlopen', return_value=result(issue)):
                 with self.assertRaises(SystemExit):
-                    G.linear_issue('fix/cx/ABC-123-description', POLICY, 'synthetic-fixture', 'https://example.invalid/graphql')
+                    G.linear_issue('fix/ABC-123-description', POLICY, 'synthetic-fixture', 'https://example.invalid/graphql')
         with patch.object(G.urllib.request, 'urlopen', side_effect=OSError('synthetic unavailable')):
             with self.assertRaises(SystemExit):
-                G.linear_issue('fix/cx/ABC-123-description', POLICY, 'synthetic-fixture', 'https://example.invalid/graphql')
+                G.linear_issue('fix/ABC-123-description', POLICY, 'synthetic-fixture', 'https://example.invalid/graphql')
