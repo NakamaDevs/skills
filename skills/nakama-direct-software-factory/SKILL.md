@@ -53,9 +53,11 @@ a project with no target date, no initiative, or no owner as a gap.
   `Software Factory` project.
 - At most ten new Linear issues per session without an owner decision.
 - No `git push`, no merge, no deploy, no purchase by the Director itself.
-  Delegate push, review-thread cleanup, and merge to a child agent in its own
-  Rex session. Never hand an operational command to the owner. Do not ask the
-  owner for permission to start a child agent.
+  Delegate push, review-thread cleanup, and merge to a child delivery agent.
+  The child runs `$nakama-deliver-change` in its own Rex session. It is not a
+  factory role, so the factory rule against merges does not bind it. It merges
+  only after the owner approves the merge. Never hand an operational command
+  to the owner. Do not ask the owner for permission to start a child agent.
 - Check credential presence with `mise run credentials:status`. Never print
   one.
 - Keep `factory/MISSION.md` and `factory/PORTFOLIO.md` current. Each change
