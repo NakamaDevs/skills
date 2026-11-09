@@ -17,7 +17,7 @@ description: Deliver a NakamaDevs repository change from a Linear issue through 
    socket, keyring-backed credentials, network access, or Git common-directory
    writes as execution-boundary probes and retry only the narrow command with
    approved access before declaring the service or credential broken.
-6. Run focused checks, then `quality.quick`, then `quality.full` from repository context. Treat hooks as feedback and CI as authoritative. Never claim an unrun check.
+6. Run focused checks, then `quality.quick`, then `quality.full` from repository context. Run every test, verify task, and development server in a Rex tab with `rex run -s "$REX_SESSION" -c <worktree> --label <issue>-<task> --keep-open --focus=false --json -- <command>`. Read the output with `rex capture -s SESSION -b BLOCK --trim`. Never start an embedded subagent or a child shell that only you can see. Treat hooks as feedback and CI as authoritative. Never claim an unrun check.
 7. Invoke `$nakama-review-change` on the final base/head diff. Resolve findings and conversations before delivery.
 8. When publication is authorized, use Conventional Commits, push the existing branch, and create or update one PR. Request CODEOWNERS, link Linear, and report validation, risks, release impact, and rollback.
 

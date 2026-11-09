@@ -45,6 +45,33 @@ to the installed assets. Codex users invoke the skill by name.
    `$nakama-write-plain-language`.
 5. When a tool fails, report the failure. Do not estimate the missing numbers.
 6. Local agent commits are unsigned. Pass the Git identity on each commit.
+7. Every agent runs in a Rex tab or child session. Every monitor, shell,
+   test run, and long command runs in a Rex tab. An agent never starts an
+   embedded subagent (Claude Code Agent tool, Codex sub-agents) and never
+   runs a child shell that only it can see. A person reviews progress from
+   any machine with `rex ls` and `rex capture`.
+
+## Delegate through Rex
+
+The owner decided this on 2026-11-08. Embedded subagents and hidden child
+shells are not visible to a person. Rex tabs are.
+
+Start a role agent in a new Rex tab from the worktree it owns:
+
+```sh
+rex run -s "$REX_SESSION" -c <worktree> --label <issue>-<agent> --keep-open --focus=false --json -- claude --agent <name> --name <label>
+```
+
+The JSON result lists the new block in `.block_ids[0]`. Read the agent's
+output with:
+
+```sh
+rex capture -s SESSION -b BLOCK --trim
+```
+
+Run a test, a verify task, or a development server the same way. Add
+`--wait` when you need the exit status. Reuse a tab by label when the work
+continues. Keep the tab open so the owner can read it.
 
 ## Tools
 

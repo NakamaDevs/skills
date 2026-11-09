@@ -37,9 +37,17 @@ Name issues by identifier and title. Link every item. Under 60 lines.
 3. Create or update follow-up issues. One issue, one owner, one repository.
    Name the manager agent in the description when an agent owns it. Mark
    dependencies with `blockedBy`.
-4. Delegate to a manager with the issue identifier, the boundary, and the
-   known traps. Verify its report against Linear or the repository before
-   you repeat it.
+4. Delegate to a manager in a new Rex tab. Never use an embedded subagent.
+   Start the manager from the worktree it owns:
+
+   ```sh
+   rex run -s "$REX_SESSION" -c <worktree> --label <issue>-<agent> --keep-open --focus=false --json -- claude --agent <name> --name <label>
+   ```
+
+   Give it the issue identifier, the boundary, and the known traps. Save
+   `.block_ids[0]` from the JSON result as BLOCK. Read its report with
+   `rex capture -s SESSION -b BLOCK --trim`. Verify the report against
+   Linear or the repository before you repeat it.
 
 ## Alignment
 
@@ -59,6 +67,8 @@ a project with no target date, no initiative, or no owner as a gap.
   factory role, so the factory rule against merges does not bind it. It merges
   only after the owner approves the merge. Never hand an operational command
   to the owner. Do not ask the owner for permission to start a child agent.
+- Run every agent, monitor, shell, test run, and long command in a Rex tab.
+  Never start an embedded subagent or a child shell that only you can see.
 - Check credential presence with `mise run credentials:status`. Never print
   one.
 - Keep `factory/MISSION.md` and `factory/PORTFOLIO.md` current. Each change

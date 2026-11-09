@@ -1,6 +1,6 @@
 interface:
   display_name: "Nakama Engineer Quality Process"
   short_description: "Open evidence-backed quality and process gap tickets"
-  default_prompt: "Use $nakama-engineer-quality-process to find CI, test, runner, and policy gaps that slow delivery and open one ticket per gap."
+  default_prompt: "Use $nakama-engineer-quality-process to find CI, test, runner, and policy gaps that slow delivery and open one ticket per gap. Run every agent and long command in a Rex tab. Never start an embedded subagent."
 policy:
   allow_implicit_invocation: false

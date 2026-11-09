@@ -62,6 +62,26 @@ class FactorySkillAgentTests(unittest.TestCase):
         text = (SKILLS / "nakama-run-software-factory" / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn("No role merges, releases, deploys, or spends.", text)
 
+    def test_no_agent_definition_lists_the_agent_tool(self) -> None:
+        # The owner decided on 2026-11-08: every agent runs in a Rex tab.
+        # An embedded subagent is visible to one agent only.
+        for skill in ROLE_SKILLS:
+            asset = SKILLS / skill / "assets" / "claude-agent.md"
+            front = frontmatter(asset)
+            tools_line = re.search(r"(?m)^tools:\s*(.+)$", front)
+            self.assertIsNotNone(tools_line, f"{asset} needs a tools line")
+            tools = {tool.strip() for tool in tools_line.group(1).split(",")}
+            self.assertNotIn("Agent", tools, f"{asset} lists the Agent tool")
+            body = asset.read_text(encoding="utf-8")
+            self.assertNotIn("Agent tool", body, f"{asset} tells the agent to use the Agent tool")
+
+    def test_every_role_runs_in_a_rex_tab(self) -> None:
+        text = (SKILLS / "nakama-run-software-factory" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("Every agent runs in a Rex tab or child session.", text)
+        for skill in ROLE_SKILLS:
+            for path in (SKILLS / skill / "SKILL.md", SKILLS / skill / "assets" / "claude-agent.md"):
+                self.assertIn("Rex tab", path.read_text(encoding="utf-8"), path)
+
 
 if __name__ == "__main__":
     unittest.main()

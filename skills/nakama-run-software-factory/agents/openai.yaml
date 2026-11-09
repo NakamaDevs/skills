@@ -1,6 +1,6 @@
 interface:
   display_name: "Nakama Run Software Factory"
   short_description: "Operate the NakamaDevs software factory"
-  default_prompt: "Use $nakama-run-software-factory to run the factory tools, produce the owner brief, and route work to the right factory role."
+  default_prompt: "Use $nakama-run-software-factory to run the factory tools, produce the owner brief, and route work to the right factory role. Run every agent and long command in a Rex tab. Never start an embedded subagent."
 policy:
   allow_implicit_invocation: false
