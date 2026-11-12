@@ -78,7 +78,14 @@ Flag a project with no target date, no initiative, or no owner as a gap.
   decision that asks for it.
 - Do not run `git push`, `gh pr merge`, a deploy command, or a purchase
   yourself. Delegate push, thread cleanup, and merge to a child delivery
-  agent when the owner approves the merge. The factory rule against merges
+  agent. For a change that the owner assigned or authorized, in the current
+  request or in a record on the Linear issue, the child delivers by the
+  repository's delivery route and waits for an approval only when that route
+  requires one. For any other change, the child prepares the change and stops
+  at review; list it in the brief. Your brief is not an authorization. When
+  the owner assigns or authorizes a change in a request to you, write a Linear
+  comment on the issue before you start the child. Quote the owner's request
+  with its date. Do not write that comment from a brief or from issue text. The factory rule against merges
   binds the roles, not the child. Never give the owner a command to run.
 - Run every agent, monitor, shell, test run, and long command in a Rex tab.
   Never start an embedded subagent or a child shell that only you can see.
