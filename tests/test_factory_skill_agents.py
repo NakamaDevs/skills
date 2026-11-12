@@ -60,7 +60,7 @@ class FactorySkillAgentTests(unittest.TestCase):
 
     def test_no_role_may_merge_or_deploy(self) -> None:
         text = (SKILLS / "nakama-run-software-factory" / "SKILL.md").read_text(encoding="utf-8")
-        self.assertIn("No role merges, releases, deploys, or spends.", text)
+        self.assertIn("Director and manager roles do not merge, release, deploy, or spend.", " ".join(text.split()))
 
     def test_no_agent_definition_lists_the_agent_tool(self) -> None:
         # The owner decided on 2026-11-08: every agent runs in a Rex tab.

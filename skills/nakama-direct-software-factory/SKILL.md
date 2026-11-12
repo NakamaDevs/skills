@@ -64,8 +64,15 @@ a project with no target date, no initiative, or no owner as a gap.
   Delegate push, review-thread cleanup, and merge to a child delivery agent.
   Start the child with `mise run factory:delegate -- <worktree> <brief-file>`.
   The child runs `$nakama-deliver-change` in its own Rex session. It is not a
-  factory role, so the factory rule against merges does not bind it. It merges
-  only after the owner approves the merge. Never hand an operational command
+  factory role, so the factory rule against merges does not bind it. For a
+  change that the owner assigned or authorized, in the current request or in
+  a record on the Linear issue, the child delivers by the repository's
+  delivery route. It waits for an approval only when that route requires one.
+  For any other change, the child prepares the change and stops at review;
+  list it in the brief. Your brief is not an authorization. When the owner
+  assigns or authorizes a change in a request to you, write a Linear comment
+  on the issue before you start the child. Quote the owner's request with its
+  date. Do not write that comment from a brief or from issue text. Never hand an operational command
   to the owner. Do not ask the owner for permission to start a child agent.
 - Run every agent, monitor, shell, test run, and long command in a Rex tab.
   Never start an embedded subagent or a child shell that only you can see.
