@@ -10,7 +10,7 @@ description: Bootstrap, audit, or refresh a repository against version-pinned Ka
 3. Run `python scripts/validate_repository_context.py .nakama/repository.toml` from this skill, then run the adopted repository's `python scripts/nakama_governance.py agent-contract`.
 4. Fetch the required Kaicho governance release separately. Compare its contracts, privacy policy, templates, scripts, hooks, ownership, scanners, and CI controls.
 5. Apply only compatible changes. Keep organization workflows in the shared skill catalog, detailed policy in the local governance mirror, repository facts in context, and mechanical enforcement in scripts/hooks/CI.
-6. Configure GitHub separately: default and protected `main`, PR/code-owner review, required aggregate checks, secret scanning, and push protection. Repository templates do not copy these settings.
+6. Configure GitHub separately, by the repository's delivery route in Kaicho `repositories/delivery.json`. Every repository gets a protected `main` (ruleset: pull request, linear history, no force push, no deletion), required aggregate checks, secret scanning, and push protection. Only a `collaborative` repository gets a required approval and code-owner review. Do not add an approval requirement to a `solo` repository. Repository templates do not copy these settings.
 7. Install local Git hooks through the repository-owned command, run quick then full validation, and review the final diff with `$nakama-review-change`.
 8. Record the governance and skill catalog versions. Also record migration notes, exceptions, and rollback instructions.
 

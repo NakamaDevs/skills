@@ -168,6 +168,18 @@ class DeliveryRouteTests(unittest.TestCase):
         override = self.deliver.split("- `owner-override`:")[1].split("9. Accept")[0]
         self.assertIn("Record each check or approval that was skipped", override)
 
+    def test_governance_adoption_adds_an_approval_to_collaborative_repositories_only(self) -> None:
+        adopt = flat(read("nakama-adopt-governance/SKILL.md"))
+        self.assertNotIn("PR/code-owner review", adopt)
+        self.assertIn(
+            "Every repository gets a protected `main` (ruleset: pull request, linear history, "
+            "no force push, no deletion), required aggregate checks, secret scanning, and push "
+            "protection", adopt)
+        self.assertIn(
+            "Only a `collaborative` repository gets a required approval and code-owner review",
+            adopt)
+        self.assertIn("Do not add an approval requirement to a `solo` repository", adopt)
+
 
 if __name__ == "__main__":
     unittest.main()
