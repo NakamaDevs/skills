@@ -34,8 +34,13 @@ when the author has said that. It is not permission to invent a candidate pool.
 - Remove executive summaries, methodology sections, coverage summaries, and
   closing recaps when they repeat what the reader just read. Keep any unique
   facts or decisions they contain.
-- Keep headings and bullets where they make the document easier to use. Do not
-  flatten a useful document into a wall of prose or force it into a fixed template.
+- Choose structure for the reader: use bullets for parallel findings, questions,
+  options, or actions, and numbered lists when order matters. Keep short
+  explanations in prose and preserve useful lists when rewriting.
+- For Slack or ticket updates with several findings or next steps, lead with a
+  short sentence, then use a compact list. Keep related qualifications with their
+  item so readers can scan without losing uncertainty. A short single-point note
+  can stay in prose; use the structure that fits the message.
 - Keep source links available without turning every paragraph into an evidence
   report. For informal notes, descriptive links near the claim or a short links
   section usually work. Preserve required citations and exact quotations.
@@ -122,6 +127,17 @@ prior to candidate qualification.”
 
 After: “This sounds like a hands-on engineering role. Will they work from an
 existing design, or do they need to design it themselves?”
+
+**A team update**
+
+After: "I checked both accounts. No settings have changed yet.
+
+- The main domain uses Provider A.
+- The campaign domain uses Provider B.
+- We still need to confirm which service sends campaign mail before changing
+  the policy.
+
+Can you confirm whether the campaign service is still in use?"
 
 **An honest handoff**
 
